@@ -1,0 +1,38 @@
+---
+title: "0.raw_netcdf_file_plot"
+author: "Aarsh"
+date: '2022-10-18'
+output: html_document
+---
+
+# setup
+```{r}
+library(raster)
+library(leaflet)
+library(rgdal)
+```
+
+
+# plot nc data on leaflet for 0.1x0.1 resolution
+```{r}
+# read in the raw netcdf file
+netcdf_file_AQLI_2021 <- raster::raster("./data/input/pollution/0.1x0.1/V5GL03.HybridPM25-NoDust-NoSeaSaltc_0p10.Global.202101-202112.nc")
+
+# add a raster image as a layer for leaflet
+netcdf_file_AQLI_2021_raster_image_layer <- projectRasterForLeaflet(netcdf_file_AQLI_2021, method = "bilinear")
+
+# color palette
+color_pal <- colorQuantile(c("#FFFFCC", "#41B6C4", "#0C2C84"), c(0, 130), na.color = "transparent", n = 7)
+
+# color palette
+color_pal <- colorNumeric(c("#7f007f", "#0000ff",  "#007fff", "#00ffff", "#00bf00", "#7fdf00",
+"#ffff00", "#ff7f00", "#ff3f00", "#ff0000", "#bf0000"), c(0, 130),  na.color = "transparent")
+
+# plot leaflet map
+
+foo_2_0.1_2020 <- leaflet() %>%
+  addTiles() %>%
+  addRasterImage(netcdf_file_AQLI_2021, colors = color_pal, opacity = 0.7) %>%
+  addLegend(pal = color_pal, values = c(0, 130), title = "PM2.5 pollution map 2021 data", position = "bottomleft")
+```
+
