@@ -185,19 +185,14 @@ gadm2 <- gadm2 %>%
 
 
 
-# Nepal changed its administrative regions in 2015, which is not reflected in GADM.
+# In Nepal 7 provinces were created and the new shape file names all of them except Province number 1 and 2. Rename "Province 2" to "Madhesh" and
+# "Province 1" remains the same. See the complete list here: https://en.wikipedia.org/wiki/Provinces_of_Nepal
 
-# Seven provinces were created. As of 4/8/19, only three have been named.
+nepal_districts <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/nepal/npl_admbnda_nd_20201117_shp/npl_admbnda_districts_nd_20201117.shp") %>%
 
-nepal <- st_read(file.path(ddir, "Nepal/npl_admbnda_districts_nd_20181210.shp")) %>%
+  select(ADM0_EN, ADM1_EN, DIST_EN, geometry) %>%
 
-  select(DIST_EN, ADM1_EN, ADM0_EN, geometry) %>%
-
-  mutate(ADM1_EN = ifelse(ADM1_EN == "7", "Sudurpashchim",
-
-                   ifelse(ADM1_EN == "6", "Karnali",
-
-                   ifelse(ADM1_EN == "4", "Gandaki", paste("Province", ADM1_EN))))) %>%
+  mutate(ADM1_EN = ifelse(ADM1_EN == "Province 2", "Madhesh", ADM1_EN)) %>%
 
   mutate(iso_alpha3 = "NPL") %>%
 
@@ -209,7 +204,7 @@ gadm2 <- gadm2 %>%
 
   filter(NAME_0 != "Nepal") %>%
 
-  rbind(nepal)
+  rbind(nepal_districts)
 
 
 
