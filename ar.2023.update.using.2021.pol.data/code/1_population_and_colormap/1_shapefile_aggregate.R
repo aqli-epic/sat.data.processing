@@ -208,15 +208,12 @@ gadm2 <- gadm2 %>%
 
 
 
-# In Bangladesh, correct misspelled name, and account for new Mymensingh Division carved out from Dhaka Division in 2015
+# In Bangladesh, correct misspelled name "Netrakona" to "Netrokona", and in the new shape file the Mymensingh Division (that was carved out from Dhaka Division in 2015)
+# is exactly what it should be, so past adjustments for that are no longer needed (hence removing that bit, but just wanted to add this note for the legacy code).
 
 gadm2 <- gadm2 %>%
 
-  mutate(NAME_2 = ifelse(NAME_0 == "Bangladesh" & NAME_1 == "Dhaka" & NAME_2 == "Netrakona", "Netrokona", NAME_2)) %>%
-
-  mutate(NAME_1 = ifelse(NAME_0 == "Bangladesh" & NAME_1 == "Dhaka" & NAME_2 %in% c("Jamalpur", "Mymensingh", "Netrokona", "Sherpur"),
-
-                         "Mymensingh", NAME_1))
+  mutate(NAME_2 = ifelse(NAME_0 == "Bangladesh" & NAME_1 == "Dhaka" & NAME_2 == "Netrakona", "Netrokona", NAME_2))
 
 
 
