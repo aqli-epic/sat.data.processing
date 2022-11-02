@@ -249,10 +249,7 @@ gadm2 <- gadm2 %>%
 # In the new shape file, Hong Kong and Macao were a part of China, so that bit is up to date.
 
 
-
-
-
-# Change Delhi's name_2 from "West" to "NCT of Delhi"
+# Change Delhi's name_2 from "West" to "NCT of Delhi" (this stays)
 
 gadm2 <- gadm2 %>%
 
