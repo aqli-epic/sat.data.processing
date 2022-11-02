@@ -1,4 +1,4 @@
-#> Last updated by Aarsh Batra (aarshbatra@uchicagotrust.org)
+#> Last updated by Aarsh Batra (aarshbatra@uchicagotrust.org): November 02, 2022.
 
 ##########################################################
 
@@ -152,7 +152,7 @@ assert_that(length(unique(gadm2$NAME_0))==length(unique(gadm0$NAME_0))) # TRUE
 
 
 
-# Delete Antarctica
+# Delete Antarctica, because there is literally no air pollution (read this: https://www.npolar.no/en/themes/pollutants-in-antarctica/#toggle-id-1)
 
 gadm2 <- gadm2 %>%
 
@@ -168,7 +168,7 @@ pak_districts <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapef
 
   select(NAME_0, NAME_1, NAME_2, iso_alpha3, geometry)
 
-
+# replace pakistan division level polygons with the district wise polygons generated above.
 gadm2 <- gadm2 %>%
 
   filter(NAME_0 != "Pakistan") %>%
@@ -186,7 +186,10 @@ gadm2 <- gadm2 %>%
 
 
 # In Nepal 7 provinces were created and the new shape file names all of them except Province number 1 and 2. Rename "Province 2" to "Madhesh" and
-# "Province 1" remains the same. See the complete list here: https://en.wikipedia.org/wiki/Provinces_of_Nepal
+# "Province 1" remains the same. See the complete list here: https://en.wikipedia.org/wiki/Provinces_of_Nepal. Also, "district" is not an
+# official administrative region in Nepal. It lies somewhere between ADM1 and ADM2. In other words, a district in Nepal would have multiple
+# ADM2 regions in it. In the past, we used "districts" instead of "ADM2", probably because ADM2 regions end up becoming super small. As of
+# now, I have continued to use the "districts" shape file.
 
 nepal_districts <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/nepal/npl_admbnda_nd_20201117_shp/npl_admbnda_districts_nd_20201117.shp") %>%
 
@@ -199,7 +202,7 @@ nepal_districts <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shap
   rename(NAME_0 = ADM0_EN, NAME_1 = ADM1_EN, NAME_2 = DIST_EN)
 
 
-
+# replace nepal gadm level 2 polygons with the updated nepal district wise polygons
 gadm2 <- gadm2 %>%
 
   filter(NAME_0 != "Nepal") %>%
@@ -217,9 +220,13 @@ gadm2 <- gadm2 %>%
 
 
 
-#Myanmar increased number of districts in 2015
+# Myanmar increased number of districts (ADM2 regions) in 2015. Also updating this by using the latest available shape file from November 17, 2020.
+# But, do note that there aren't many changes compared to the last shape file. Myanmar administrative divisions are higher in number than we
+# usually find in other countries (See: https://themimu.info/sites/themimu.info/files/documents/Administrative_Structure_2008Constitution_20Mar2020.pdf).
+# Also, for our purposes, we assume ST to be "NAME_1" and "DT" to be "NAME_2". Compared to the previous shape file, this has been updated and
+# contains updated border information.
 
-myanmar <- st_read(file.path(ddir, "Myanmar/mmr_polbnda_adm2_250k_mimu.shp")) %>%
+myanmar_districts <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/myanmar/mmr_polbnda_adm2_250k_mimu_June_2021/mmr_polbnda_adm2_250k_mimu_june2021.shp") %>%
 
   select(ST, DT, geometry) %>%
 
@@ -230,12 +237,12 @@ myanmar <- st_read(file.path(ddir, "Myanmar/mmr_polbnda_adm2_250k_mimu.shp")) %>
   mutate(iso_alpha3 = "MMR")
 
 
-
+# replace Myanmar gadm level 2 polygons with the updated (last updated: June, 2021) Myanmar admin 2 level polygons
 gadm2 <- gadm2 %>%
 
   filter(NAME_0 != "Myanmar") %>%
 
-  rbind(myanmar)
+  rbind(myanmar_districts)
 
 
 
