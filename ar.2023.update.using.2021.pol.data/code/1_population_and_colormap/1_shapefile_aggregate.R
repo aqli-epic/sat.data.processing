@@ -1,3 +1,5 @@
+#> Last updated by Aarsh Batra (aarshbatra@uchicagotrust.org)
+
 ##########################################################
 
 # 1_shapefile_aggregate.R
@@ -8,15 +10,15 @@
 
 # Output: Colormap, hover region, and US/China/India
 
-#         shapefiles, with known errors corrected. Also, 
+#         shapefiles, with known errors corrected. Also,
 
-#         crosswalk files between color and hover, and 
+#         crosswalk files between color and hover, and
 
 #         hover and states.
 
 ##########################################################
 
-# benchmarking
+#> benchmarking
 start_time <- Sys.time()
 
 
@@ -32,46 +34,83 @@ library(assertthat)
 
 library(haven)
 
+library(geodata)
+
+#> enter path to where your shapefiles folder is stored
+ddir <- "./ar.2023.update.using.2021.pol.data/data/input/shapefiles"
+
+# in_dir <- "gadm_levels"
+#
+# pak_dir <- "Pakistan/OCHA Pakistan shapefiles 20181218"
+
+#> assuming the home directory is set to your root (.) below figure out the total number of layers in the geopackage data source
+layer_info <- st_layers(dsn = "./ar.2023.update.using.2021.pol.data/data/input/shapefiles/gadm_410-levels/gadm_410-levels.gpkg")
+
+#> reading in the gadm level geopackage file (which contains 6 layers, starting from "ADM_0" and going till to "ADM_5", even though we end up using only ADM_0, ADM_1, ADM_2. Also, keeping only relevant columns.
+
+# admin level 0 (country)
+gadm0 <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/gadm_410-levels/gadm_410-levels.gpkg", layer = "ADM_0", stringsAsFactors = FALSE) %>%
+  select(GID_0, COUNTRY, geom) %>%
+  rename(iso_alpha3 = GID_0,
+         NAME_0 = COUNTRY,
+         geometry = geom)
+
+# admin level 1 (e.g. state), the terminology may be different for different countries. In this there is one polygon
+# for which NAME_0 and NAME_1 equals the string "NA"
+gadm1 <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/gadm_410-levels/gadm_410-levels.gpkg", layer = "ADM_1", stringsAsFactors = FALSE) %>%
+  select(GID_0, COUNTRY, NAME_1, geom) %>%
+  rename(iso_alpha3 = GID_0,
+         NAME_0 = COUNTRY,
+         geometry = geom)
+
+# admin level 2 (e.g county, prefecture, district, etc.)
+gadm2 <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/gadm_410-levels/gadm_410-levels.gpkg", layer = "ADM_2", stringsAsFactors = FALSE) %>%
+  select(GID_0, COUNTRY, NAME_1, NAME_2, geom) %>%
+  rename(iso_alpha3 = GID_0,
+         NAME_0 = COUNTRY,
+         geometry = geom)
+
+# admin level 3 (e.g. sub-districts), this level we  don't use as of now (October 2022) in AQLI
+gadm3 <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/gadm_410-levels/gadm_410-levels.gpkg", layer = "ADM_3", stringsAsFactors = FALSE) %>%
+  select(GID_0, COUNTRY, NAME_1, NAME_2, NAME_3, geom) %>%
+  rename(iso_alpha3 = GID_0,
+         NAME_0 = COUNTRY,
+         geometry = geom)
 
 
-ddir <- "C:/Arc/Preserve/data/shapefiles/"
+#> sanity checks on raw shape files
 
-in_dir <- "gadm_levels"
+# duplicate country names in the gadm0 file (why?): India, China, Pakistan (probably due to political sensitivity)
+gadm0$NAME_0[which(duplicated(gadm0$NAME_0))]
 
-pak_dir <- "Pakistan/OCHA Pakistan shapefiles 20181218"
+# any countries that are NA or "NA"
+gadm0 %>% as_tibble() %>% filter(is.na(NAME_0)) # no
+gadm1 %>% as_tibble() %>% filter(is.na(NAME_0)) # no
+gadm2 %>% as_tibble() %>% filter(is.na(NAME_0)) # no
 
+gadm0 %>% as_tibble() %>% filter(NAME_0 == "NA") # no
+gadm1 %>% as_tibble() %>% filter(NAME_0 == "NA") # yes (1 row, this is an area in Scotland called Shetland Islands as per Google Maos. Assign it "United Kingdom" as its country, with "GBR" as its iso_alpha code.
+gadm2 %>% as_tibble() %>% filter(NAME_0 == "NA") #no
 
+# any states that are NA or "NA"
+gadm1 %>% as_tibble() %>% filter(is.na(NAME_1)) # no
+gadm2 %>% as_tibble() %>% filter(is.na(NAME_1)) # no
 
-### Read in raw GADM shapefiles, keep only necessary variables
+gadm1 %>% as_tibble() %>% filter(NAME_1 == "NA") # yes (5 rows): United Kingdom, Ireland, Marshall Islands, Netherlands, "NA"
+gadm2 %>% as_tibble() %>% filter(NAME_1 == "NA") # yes (2 rows): United Kingdom
 
-# Country-level shapefile
-
-gadm0 <- st_read(file.path(ddir, in_dir, "gadm36_0.shp"), stringsAsFactors = FALSE) %>%
-
-  select(GID_0, NAME_0, geometry) %>%
-
-  rename(iso_alpha3 = GID_0)
-
-gadm1 <- st_read(file.path(ddir, in_dir, "gadm36_1.shp"), stringsAsFactors = FALSE) %>%
-
-  select(GID_0, NAME_0, NAME_1, geometry) %>%
-
-  rename(iso_alpha3 = GID_0)
-
-gadm2 <- st_read(file.path(ddir, in_dir, "gadm36_2.shp"), stringsAsFactors = FALSE) %>% 
-
-  select(GID_0, NAME_0, NAME_1, NAME_2, geometry) %>%
-
-  rename(iso_alpha3 = GID_0)
-
-gadm3 <- st_read(file.path(ddir, in_dir, "gadm36_3.shp"), stringsAsFactors = FALSE) %>% 
-
-  select(GID_0, NAME_0, NAME_1, NAME_2, NAME_3, geometry) %>%
-
-  rename(iso_alpha3 = GID_0)
+# any counties/districts/prefectures, etc that are NA
+gadm2 %>% as_tibble() %>% filter(is.na(NAME_2)) # no
+gadm2 %>% st_drop_geometry() %>% as_tibble() %>% filter(NAME_2 == "NA") %>% View()  # yes (104 rows): Åland, United Arab Emirates, Chile, United Kingdom, Ukraine, Uruguay,
 
 
-######## 1. Generate colormap shapefile ########
+#> setting the "NA" country in gadm1, to "United Kingdom", before creating the colormap shapefile
+gadm1 <- gadm1 %>%
+  mutate(NAME_1 = ifelse(NAME_0 == "NA", "Shetland Islands", NAME_1),
+    NAME_0 = ifelse(NAME_0 == "NA", "United Kingdom", NAME_0),
+         iso_alpha3 = ifelse(iso_alpha3 == "NA", "GBR", iso_alpha3))
+
+#> ######## 1. Generate colormap shapefile ########
 
 #Colormap = admin2 + (admin1 regions of countries with no admin2 recorded) + (admin0 of countries with no admin1 or admin2 recorded)
 
@@ -80,7 +119,7 @@ gadm3 <- st_read(file.path(ddir, in_dir, "gadm36_3.shp"), stringsAsFactors = FAL
 countries_to_add <- anti_join(data.frame(NAME_0=unique(gadm1$NAME_0)), data.frame(NAME_0=unique(gadm2$NAME_0)), by= "NAME_0")
 
 
-
+# update the gadm2 shape file
 gadm2 <- gadm1 %>%
 
   filter(NAME_0 %in% countries_to_add$NAME_0) %>%
@@ -109,7 +148,7 @@ gadm2 <- gadm0 %>%
 
 #Number of countries in gadm2 shapefile should now equal number of countries in country-level shapefile
 
-assert_that(length(unique(gadm2$NAME_0))==length(gadm0$NAME_0))
+assert_that(length(unique(gadm2$NAME_0))==length(unique(gadm0$NAME_0))) # TRUE
 
 
 
@@ -123,27 +162,26 @@ gadm2 <- gadm2 %>%
 
 # For Pakistan, replace "divisions" with shapefile of up-to-date districts, which is an admin level people care more about,
 
-# and up-to-date province boundaries
+# and up-to-date province boundaries.
 
-pak_districts <- st_read(file.path(ddir, pak_dir, "pak_admbnda_adm2_ocha_pco_gaul_20181218.shp")) %>%
+pak_districts <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/pakistan/pak_adm_wfp_20220909_shp/pak_admbnda_adm2_wfp_20220909.shp") %>%
 
-  select(ADM2_EN, ADM1_EN, ADM0_EN, geometry) %>%
-
-  mutate(iso_alpha3 = "PAK") %>%
-
-  rename(NAME_0 = ADM0_EN, NAME_1 = ADM1_EN, NAME_2 = ADM2_EN)
-
+  select(NAME_0, NAME_1, NAME_2, iso_alpha3, geometry)
 
 
 gadm2 <- gadm2 %>%
 
-  filter(NAME_0 != "Pakistan" | NAME_1 %in% c("Azad Kashmir", "Northern Areas")) %>%
+  filter(NAME_0 != "Pakistan") %>%
 
-  rbind(pak_districts) %>%
+  rbind(pak_districts)
 
-  mutate(NAME_1 = ifelse(NAME_1 == "Northern Areas", "Gilgit-Baltistan", NAME_1)) %>%
+  # these commented statements were adjustments made in the old code for Pakistan. We no longer need these adjustments as the new shapefile
+  # already takes care of it. Also, in defining Pakistan, I have assumed that Azad Kashmir and Gilgit-Baltistan (previously known as Northern Areas)
+  # are now part of Pakistan.
 
-  mutate(NAME_2 = ifelse(NAME_2 %in% c("Azad Kashmir", "Northern Areas"), "", NAME_2))
+  # mutate(NAME_1 = ifelse(NAME_1 == "Northern Areas", "Gilgit-Baltistan", NAME_1)) %>%
+  #
+  # mutate(NAME_2 = ifelse(NAME_2 %in% c("Azad Kashmir", "Northern Areas"), "", NAME_2))
 
 
 
@@ -266,13 +304,13 @@ gadm2 <- gadm2 %>%
 
 # Parts of a district that got grouped to Telangana stayed in Andhra Pradesh
 
-tg_tehsils <- gadm3 %>% 
+tg_tehsils <- gadm3 %>%
 
   filter(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_3 %in% c("Bhadrachalam","Borgampad"))
 
 
 
-tg_old_district <- gadm2 %>% 
+tg_old_district <- gadm2 %>%
 
   filter(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Bhadradri")
 
@@ -282,7 +320,7 @@ diff <- st_difference(tg_tehsils, tg_old_district) %>%
 
   st_cast("POLYGON") %>%
 
-  mutate(id = row_number()) %>% 
+  mutate(id = row_number()) %>%
 
   filter(id %in% c(1,3)) %>%
 
@@ -296,7 +334,7 @@ diff <- st_difference(tg_tehsils, tg_old_district) %>%
 
 
 
-godavari <- gadm2 %>% 
+godavari <- gadm2 %>%
 
   filter(NAME_1 == "Andhra Pradesh" & NAME_2 %in% c("East Godavari", "West Godavari")) %>%
 
@@ -308,7 +346,7 @@ godavari <- gadm2 %>%
 
 
 
-gadm2 <- gadm2 %>% 
+gadm2 <- gadm2 %>%
 
   filter(!(NAME_1 == "Andhra Pradesh" & NAME_2 %in% c("East Godavari", "West Godavari"))) %>%
 
@@ -572,25 +610,25 @@ print("All adjustments to shapefile completed and color map shape file written."
 
 # List of countries for which whole country should be single hover region
 
-agg0 <- c("Akrotiri and Dhekelia", "American Samoa", "Andorra", "Antigua and Barbuda", "Barbados", 
+agg0 <- c("Akrotiri and Dhekelia", "American Samoa", "Andorra", "Antigua and Barbuda", "Barbados",
 
-						 "Bonaire, Sint Eustatius and Saba", "British Virgin Islands", "Cape Verde", "Cayman Islands", 
+						 "Bonaire, Sint Eustatius and Saba", "British Virgin Islands", "Cape Verde", "Cayman Islands",
 
-						 "Comoros", "Cyprus", "Dominica", "Faroe Islands", "Fiji", "French Polynesia", 
+						 "Comoros", "Cyprus", "Dominica", "Faroe Islands", "Fiji", "French Polynesia",
 
-						 "French Southern Territories", "Grenada", "Guernsey", "Isle of Man", "Liechtenstein",  
+						 "French Southern Territories", "Grenada", "Guernsey", "Isle of Man", "Liechtenstein",
 
-						 "Martinique", "Mauritius", "Mayotte", "Micronesia", "Montserrat", "Nauru", 
+						 "Martinique", "Mauritius", "Mayotte", "Micronesia", "Montserrat", "Nauru",
 
-						 "New Caledonia", "Northern Cyprus", "Northern Mariana Islands", "Palau", "Puerto Rico", 
+						 "New Caledonia", "Northern Cyprus", "Northern Mariana Islands", "Palau", "Puerto Rico",
 
-						 "Reunion", "Saint Helena", "Saint Kitts and Nevis", "Saint Lucia", "Saint Pierre and Miquelon", 
+						 "Reunion", "Saint Helena", "Saint Kitts and Nevis", "Saint Lucia", "Saint Pierre and Miquelon",
 
-						 "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Seychelles", 
+						 "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Seychelles",
 
-						 "Solomon Islands", "Svalbard and Jan Mayen", "Timor-Leste", "Tokelau", "Tonga", 
+						 "Solomon Islands", "Svalbard and Jan Mayen", "Timor-Leste", "Tokelau", "Tonga",
 
-						 "Trinidad and Tobago", "Turks and Caicos Islands", "Tuvalu", "United States Minor Outlying Islands", 
+						 "Trinidad and Tobago", "Turks and Caicos Islands", "Tuvalu", "United States Minor Outlying Islands",
 
 						 "Vanuatu", "Virgin Islands, U.S.", "Wallis and Futuna")
 
@@ -598,41 +636,41 @@ agg0 <- c("Akrotiri and Dhekelia", "American Samoa", "Andorra", "Antigua and Bar
 
 # so use ISO code to get them
 
-agg0_iso <- c("ALA", "STP") 
+agg0_iso <- c("ALA", "STP")
 
 
 
 # List of countries for which hover regions should be admin1 regions because there are too many admin2 regions and/or admin2 regions are too small
 
-agg1 <- c("Afghanistan", "Algeria", "Argentina", "Armenia", "Australia", "Austria", 
+agg1 <- c("Afghanistan", "Algeria", "Argentina", "Armenia", "Australia", "Austria",
 
-						 "Azerbaijan", "Bahamas", "Benin", "Bhutan", "Brazil", 
+						 "Azerbaijan", "Bahamas", "Benin", "Bhutan", "Brazil",
 
-						 "Brunei", "Bulgaria", "Burundi", "Cambodia", "Colombia", "Costa Rica", "Croatia", "Cuba", "Czech Republic", 
+						 "Brunei", "Bulgaria", "Burundi", "Cambodia", "Colombia", "Costa Rica", "Croatia", "Cuba", "Czech Republic",
 
-						 "Denmark", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Estonia", 
+						 "Denmark", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Estonia",
 
-						 "Ethiopia", "Gambia", "Georgia", "Germany", "Guatemala", "Guinea-Bissau", 
+						 "Ethiopia", "Gambia", "Georgia", "Germany", "Guatemala", "Guinea-Bissau",
 
-						 "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "Iran", "Israel", 
+						 "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "Iran", "Israel",
 
-						 "Jamaica", "Japan", "Jordan", "Kenya", "Kazakhstan", "Kosovo", 
+						 "Jamaica", "Japan", "Jordan", "Kenya", "Kazakhstan", "Kosovo",
 
-						 "Kyrgyzstan", "Laos", "Lebanon", "Lesotho", "Liberia", 
+						 "Kyrgyzstan", "Laos", "Lebanon", "Lesotho", "Liberia",
 
-						 "Libya", "Macedonia", "Malawi", "Mexico", "Mongolia", "Namibia", 
+						 "Libya", "Macedonia", "Malawi", "Mexico", "Mongolia", "Namibia",
 
-						 "Netherlands", "New Zealand", "Nicaragua", "Nigeria", "North Korea", "Norway", 
+						 "Netherlands", "New Zealand", "Nicaragua", "Nigeria", "North Korea", "Norway",
 
-						 "Palestina", "Panama", "Paraguay", "Philippines", "Poland", "Portugal", 
+						 "Palestina", "Panama", "Paraguay", "Philippines", "Poland", "Portugal",
 
-						 "Romania", "Russia", "Rwanda", "Senegal", "Serbia", "Slovakia", "Slovenia", 
+						 "Romania", "Russia", "Rwanda", "Senegal", "Serbia", "Slovakia", "Slovenia",
 
-						 "Sri Lanka", "Suriname", "Swaziland", "Sweden", "Switzerland", "Tajikistan", 
+						 "Sri Lanka", "Suriname", "Swaziland", "Sweden", "Switzerland", "Tajikistan",
 
-						 "Tanzania", "Thailand", "Togo", "Tunisia", "Turkey", 
+						 "Tanzania", "Thailand", "Togo", "Tunisia", "Turkey",
 
-						 "Turkmenistan", "Uganda", "Ukraine", "Uruguay", "Uzbekistan", 
+						 "Turkmenistan", "Uganda", "Ukraine", "Uruguay", "Uzbekistan",
 
 						 "Venezuela", "Vietnam", "Yemen")
 
@@ -704,9 +742,9 @@ assert_that(any(duplicated(data.table(gadm2 %>% st_set_geometry(NULL)), by=c("NA
 
 # Start with colormap regions that have 1-to-1 correspondance with hover regions
 
-hover_color_cw <- inner_join(gadm2 %>% st_set_geometry(NULL) %>% rename(objectid_color = objectid), 
+hover_color_cw <- inner_join(gadm2 %>% st_set_geometry(NULL) %>% rename(objectid_color = objectid),
 
-  hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid), by=c("NAME_0", "NAME_1", "NAME_2")) %>% 
+  hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid), by=c("NAME_0", "NAME_1", "NAME_2")) %>%
 
   select(objectid_color, objectid_hover)
 
@@ -714,7 +752,7 @@ hover_color_cw <- inner_join(gadm2 %>% st_set_geometry(NULL) %>% rename(objectid
 
 # Add in colormap regions that got replaced by admin1 regions in hover shapefile
 
-hover_color_cw <- inner_join(gadm2 %>% st_set_geometry(NULL) %>% rename(objectid_color = objectid) %>% filter(NAME_0 %in% agg1), 
+hover_color_cw <- inner_join(gadm2 %>% st_set_geometry(NULL) %>% rename(objectid_color = objectid) %>% filter(NAME_0 %in% agg1),
 
   hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid), by=c("NAME_0", "NAME_1")) %>%
 
@@ -726,7 +764,7 @@ hover_color_cw <- inner_join(gadm2 %>% st_set_geometry(NULL) %>% rename(objectid
 
 # Add in colormap regions that got replaced by admin0 regions in hover shapefile
 
-hover_color_cw <- inner_join(gadm2 %>% st_set_geometry(NULL) %>% rename(objectid_color = objectid) %>% filter(NAME_0 %in% agg0 | iso_alpha3 %in% agg0_iso), 
+hover_color_cw <- inner_join(gadm2 %>% st_set_geometry(NULL) %>% rename(objectid_color = objectid) %>% filter(NAME_0 %in% agg0 | iso_alpha3 %in% agg0_iso),
 
   hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid), by=c("NAME_0")) %>%
 
@@ -763,7 +801,7 @@ us_state <- gadm2 %>%
 
   summarise()
 
-us_state <- us_state[with(us_state, order(NAME_1)),] %>% 
+us_state <- us_state[with(us_state, order(NAME_1)),] %>%
 
   tibble::rowid_to_column("id_state")
 
@@ -791,7 +829,7 @@ st_write(china_state, file.path(ddir, "usa_india_china_state/CHN_adm1.shp"), lay
 
 # India: make state shapefile from admin2 shapefile to account for separate Ladahk UT
 
-india_state <- gadm2 %>% 
+india_state <- gadm2 %>%
 
   filter(NAME_0 == "India") %>%
 
@@ -810,11 +848,11 @@ print("USA/India/China state shape files written")
 
 ######## 5. Generate crosswalk files between US China India state/province and hover regions ########
 
-us_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid), 
+us_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid),
 
-    us_state %>% st_set_geometry(NULL)%>% rename(objectid_state = id_state), 
+    us_state %>% st_set_geometry(NULL)%>% rename(objectid_state = id_state),
 
-    by=c("NAME_0", "NAME_1")) %>% 
+    by=c("NAME_0", "NAME_1")) %>%
 
   select(objectid_hover, objectid_state)
 
@@ -824,9 +862,9 @@ write.table(us_state_cw, file = file.path(ddir, "crosswalks/USA_state_hover_cros
 
 
 
-china_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid), 
+china_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid),
 
-    china_state %>% st_set_geometry(NULL)%>% rename(objectid_state = id_state), 
+    china_state %>% st_set_geometry(NULL)%>% rename(objectid_state = id_state),
 
     by=c("NAME_0", "NAME_1")) %>%
 
@@ -838,9 +876,9 @@ write.table(china_state_cw, file = file.path(ddir, "crosswalks/China_state_hover
 
 
 
-india_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid), 
+india_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid),
 
-    india_state %>% st_set_geometry(NULL)%>% rename(objectid_state = id_state), 
+    india_state %>% st_set_geometry(NULL)%>% rename(objectid_state = id_state),
 
     by=c("NAME_0", "NAME_1")) %>%
 
@@ -861,13 +899,13 @@ standards <- read_dta("C:/Arc/Preserve/data/standards/country_standards.dta") %>
 
 
 
-color_country_cw <- gadm2 %>% 
+color_country_cw <- gadm2 %>%
 
   st_set_geometry(NULL) %>%
 
   left_join(standards, by = "NAME_0") %>%
 
-  select(objectid, pm25standard) 
+  select(objectid, pm25standard)
 
 
 

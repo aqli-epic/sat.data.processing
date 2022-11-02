@@ -1,0 +1,113 @@
+# Join Rasters.R - Experimenting with a new AQLI backend workflow----------------
+
+# load libraries
+library(raster)
+library(rgdal)
+library(dplyr)
+library(ncdf4)
+library(assertthat)
+library(fasterize)
+library(sf)
+library(SpaDES)
+
+# set global parameters
+pop_year <- 2021
+update_year <- 2021
+
+start_year <- 1998
+end_year <- 2021
+
+# set path variables
+pop_dir <- "./data/input/population/"
+shp_dir <- "./data/input/shapefiles/gadm_410-levels/"
+pol_dir <- "./data/input/pollution/0.1x0.1/"
+out_dir <- "./data/output"
+
+# Raster functions are amenable to parallelization
+beginCluster()
+
+### PREPARE POLLUTION RASTERS
+	# Read in pollution netcdf files (one file per year), convert to raster, and stack all years
+	# into a single brick
+	setwd(file.path(pol_dir, fsep = ""))
+	pol_files <- list.files(pattern = "*.nc")
+	pol_files <- sort(pol_files) # Make sure files will be read in order of increasing year
+	brick <- lapply(pol_files, raster) %>% stack()
+	crs(brick) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+	pmyears <- paste0("pm", as.character(c(start_year:end_year)))
+	names(brick) <- pmyears
+
+	# If pollution rasters have x and y switched, then transpose them
+	if(bbox(brick)[2,1]< -90 | bbox(brick)[2,2]>90){
+		brick <- brick %>% flip(direction = 'x') %>% t() %>% flip(direction = 'x')
+	}
+	assert_that(bbox(brick)[1,1]< -175 & bbox(brick)[1,2]>175 & bbox(brick)[2,1]<bbox(brick)[2,2])
+
+	# Annoyingly, coordinates of pollution rasters are off by about 1e-6. Make them match desired coordinates.
+	# Resampling takes 15ish minutes on Acropolis.
+	rows <- nrow(brick)
+	cols <- ncol(brick)
+	ymin <- round(bbox(brick)[2,1], digits = 2)
+	ymax <- round(bbox(brick)[2,2], digits = 2)
+	goodcoords <- raster(nrows=rows, ncols=cols, xmn=-180, xmx=180, ymn=ymin, ymx=ymax)
+	print("Beginning to resample pollution rasters")
+	brick <- brick %>% resample(goodcoords, method='ngb',
+		filename = file.path(out_dir, "update/pollution_resampled_notdisagged.tif", fsep = ""),
+		format="GTiff", overwrite = TRUE)
+	assert_that(bbox(brick)[1,1]==-180 & bbox(brick)[1,2]==180)
+
+
+
+### MATCH POPULATION TO POLLUTION
+	landscan <- raster(file.path(pop_dir, "/Raw/landscan", pop_year, "/lspop", pop_year, fsep = ""))
+	# Confirm orientation of landscan raster. Remember x = longitude, y = latitude
+	assert_that(min(bbox(landscan) == matrix(c(-180,-90,180,90),nrow=2,ncol=2)) == 1)
+	# Pollution rasters don't cover north of 70N or south of 60S latitude. Crop
+	# landscan raster to match.
+	landscan_cropped <- landscan %>% crop(extent(brick))
+
+	# Convert pollution raster brick into resolution of population raster.
+	# For pollution data at 0.05x0.05 degree resolution and LandScan data at 30"x30" resolution,
+	# resolution of latter is integer multiple of former, so can disaggregate without worrying about bilinear
+	# interpolation.
+	# First, make sure resolution of pollution data is integer multiple of resolution of LandScan data
+	factor <- dim(landscan_cropped)[1:2]/dim(brick)[1:2]
+	assert_that(identical(factor, round(factor))) # and in particular, both should be 6
+	# Next, disaggregate and save result to file so as not to have to run the time-consuming disaggregation
+	# step again if process crashes before finishing for any reason
+	print("Beginning to disaggregate pollution rasters")
+	brick <- disaggregate(brick, fact = factor,
+		filename=file.path(out_dir, "/", update_year, "update/pollution_disagged.tif", fsep = ""),
+		format = "GTiff", overwrite = TRUE)
+
+	# Now can add population layer to brick, hence matching each population point to a pollution value
+	values(landscan_cropped)[values(landscan_cropped)==0] = NA
+	names(landscan_cropped) <- "population"
+	brick <- brick %>% addLayer(landscan_cropped)
+
+### MATCH TO COLORMAP POLYGONS
+	# Read in colormap polygons
+	colormap <- st_read(file.path(shp_dir, "color/colormap.shp"), stringsAsFactors = FALSE)
+
+	# Now match each population/pollution point to a colormap polygon. To do this, convert
+	# polygons to raster of same resolution as population raster, with value of each cell equal
+	# to objectid of polygon that covers its center.
+	# Fasterize is an ultra-fast version of the rasterize function.
+	print("Beginning to rasterize shapefile")
+	polygon_cells <- fasterize(colormap, landscan_cropped, field = "objectid", fun = "last")
+	writeRaster(polygon_cells,
+		filename=file.path(out_dir, "/", update_year, "update/color_rasterized.tif", fsep = ""),
+		format = "GTiff", overwrite = TRUE)
+	brick <- brick %>% addLayer(polygon_cells)
+
+### EXPORT RASTER STACK
+	writeRaster(brick, filename=file.path(out_dir, "/", update_year, "update/all_layers.tif", fsep = ""),
+		format = "GTiff", overwrite = TRUE)
+
+	# SANITY CHECK export a piece of the brick
+	tile <- brick %>% crop(extent(105, 120, 15, 30))
+	writeRaster(tile,
+		filename = file.path(out_dir, "/", update_year, "update/brick_tile.tif", fsep = ""),
+		format="GTiff", overwrite = TRUE)
+
+endCluster()
