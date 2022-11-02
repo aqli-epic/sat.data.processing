@@ -246,21 +246,9 @@ gadm2 <- gadm2 %>%
 
 
 
-# Make Hong Kong, Macao part of China
-
-gadm2 <- gadm2 %>%
-
-  filter(!NAME_0 %in% c("Hong Kong", "Macao"))
+# In the new shape file, Hong Kong and Macao were a part of China, so that bit is up to date.
 
 
-
-gadm2 <- gadm0 %>%
-
-  filter(NAME_0 %in% c("Hong Kong", "Macao")) %>%
-
-  mutate(NAME_1 = NAME_0, NAME_2 = "", NAME_0 = "China", iso_alpha3 = "CHN") %>%
-
-  rbind(gadm2)
 
 
 
