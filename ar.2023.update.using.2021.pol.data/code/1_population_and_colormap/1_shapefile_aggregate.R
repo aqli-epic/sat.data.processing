@@ -432,7 +432,7 @@ gadm2 <- gadm2 %>%
 
 
 
-# As of Oct 31, 2019, Ladakh has been carved out of Jammu and Kashmir as separate union territory
+# As of Oct 31, 2019, Ladakh has been carved out of Jammu and Kashmir as separate union territory (this stays the same and holds in November, 2022)
 
 gadm2 <- gadm2 %>%
 
