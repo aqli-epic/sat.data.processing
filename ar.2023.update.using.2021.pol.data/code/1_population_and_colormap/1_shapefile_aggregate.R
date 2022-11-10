@@ -314,26 +314,12 @@ gadm2 <- gadm2 %>%
   rbind(telangana_districts)
 
 
-# andhra pradesh
-
-godavari <- gadm2 %>%
-
-  filter(NAME_1 == "Andhra Pradesh" & NAME_2 %in% c("East Godavari", "West Godavari")) %>%
-
-  rbind(diff) %>%
-
-  group_by(iso_alpha3, NAME_0, NAME_1, NAME_2) %>%
-
-  summarise()
-
-
-
-gadm2 <- gadm2 %>%
-
-  filter(!(NAME_1 == "Andhra Pradesh" & NAME_2 %in% c("East Godavari", "West Godavari"))) %>%
-
-  rbind(godavari)
-
+# In the old shape file it was assumed that parts of Bhadradri Kothagudem stayed in Andhra Pradesh's East Godavri region and were grouped
+# back into AP. But, that is incrorect. Those parts should stay in "Bhadradri Kothagudem" (which is a district in Telangana), and the above
+# Telangana adjustment takes that into account. So, now the additional adjustment in AP's West/East Godavri region is not needed (hence removed). Also, previously,
+# the AP adjustment was leading to a "white" crack in the map, a place with no data lying at the border of  East Godavri and Bhadradri
+# Kothagudem. But, the above Telangana adjustment has now fixed that, such that there is no place with in Telangana or AP, where there is
+# missing data.
 
 
 # New district in Haryana carved out of Bhiwani district
