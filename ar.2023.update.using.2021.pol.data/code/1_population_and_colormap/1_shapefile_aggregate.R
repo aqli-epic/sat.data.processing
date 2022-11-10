@@ -164,9 +164,14 @@ gadm2 <- gadm2 %>%
 
 # and up-to-date province boundaries.
 
-pak_districts <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/pakistan/pak_adm_wfp_20220909_shp/pak_admbnda_adm2_wfp_20220909.shp") %>%
+pak_districts <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/pakistan/pak_adm_wfp_20220909_shp/pak_admbnda_adm2_wfp_20220909.shp")
 
-  select(NAME_0, NAME_1, NAME_2, iso_alpha3, geometry)
+pak_districts <- pak_districts %>%
+  rename(NAME_0 = ADM0_EN,
+         NAME_1 = ADM1_EN,
+         NAME_2 = ADM2_EN) %>%
+  mutate(iso_alpha3 = "PAK") %>%
+  select(iso_alpha3, NAME_0, NAME_1, NAME_2, geometry)
 
 # replace pakistan division level polygons with the district wise polygons generated above.
 gadm2 <- gadm2 %>%
@@ -257,66 +262,59 @@ gadm2 <- gadm2 %>%
 
 
 
-# Account for Telangana's many new districts. As of April 2019, there are 33 new districts,
+# Account for Telangana's many new districts. As of April 2019, there are 33 new districts.
 
-# with two being added in 2019. The latest shapefile I can find is from Aug 2018, so has 31 districts.
+# I started off with a base shape file of Telangana. This is not a gadm shapefile, its a different one
+# (as listed above), because the gadm level 2 shape file only takes into account a subset of the 33 districts of Telangana. This is why we have
+# to use a separate shape file for Telangana. But, even this new shapefile loaded in "telangana_districts" variable above does not contain
+# 2 sub-district polygons. Two sub-districts of Bhadradri Kothagudem district (Bhadrachalam, Borgampad) are not included in the above definition of Bhadradri Kothagudem.
+# These 2 sub-districts will be "unioned" with the rest of the definition of Bhadradri Kothagudem. All of this is done in QGIS. It can be done
+# in R, but the st_union function of R is less accurate than the corresponding "dissolve" feature of QGIS. So, I have modified the base raw shapefile
+# of Telangana, by making this additional adjustment. I'll directly load this file in and it'll be named the "telangana_districts_adjusted", to differentiate it from
+# the raw telangana shape file (both of these will be present in the data/raw folder itself, the raw file can be identified with the "raw" suffix in
+# front of it).
 
-# Source: https://hub.arcgis.com/datasets/10dd8ed296fb4726b990882ff7d27990_0
+# In case you want to recreate the steps by which I got the asjusted base shape file for Telangana in QGIS, do this:
 
-telangana <- st_read(file.path(ddir, "Telangana/Agriculture_Telangana.shp")) %>%
+# Step 1: Take a symmetrical difference between telangana state level shape file (stored in the "telangana_other/telangana_state_gadm1" folder)
+# and the telangana district level shape file (stored in the "telangana_raw_districts" folder). This will give you a shape that will comprise
+# of the two missing sub-districts of Bhadradri Kothagudem (Bhadrachalam, Borgampad) and some additional space, which we will group into
+# Bhadradri Kothagudem itself.
 
-  select(districts, geometry) %>%
+# Step 2: Use the output from Step 1 and to it add the rest of the "Bhadradri Kothagudem" (present in the telangana_other/bhadradri_kothagudem_district folder),
+# by using a "union" operation. Then, dissolve this union into a single polygon, which will then be the final "Bhadradri Kothagudem" district.
 
-  rename(NAME_2 = districts) %>%
+# Step 3: Add the output from Step 2, to the "everything_except_bhadradri_kothagudem_district_non_gadm.shp" file (by taking a union), present in the folder of the
+# same name.
 
-  mutate(NAME_1 = "Telangana") %>%
+# At this point, you'll have a final Telangana base shape file that I'll further clean in R below.
 
-  mutate(NAME_0 = "India") %>%
+# Also, just a quick note - past code that was used to make similar adjustments to Telangana was inaccurate and it left a blank white spot
+# in the map (which can be seen if you zoom in around the areas mentioned above). That spot is fixed using the above process. So, all past adjustment
+# code has been removed. Also, in the past code comments it was mentioned that Bhadrachalam and Bhadradri are supposed to be part of
+# Andhra Pradesh, but that's not true, they belong in the "Bhadradri Kothagudem" district of Telangana itself.
 
-  mutate(iso_alpha3 = "IND")
+telangana_districts <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/telangana/telangana_adjusted/telangana_adjusted_base_map_used_in_colormap.shp")
 
-
-print("All gadm shape files read in")
+telangana_districts <- telangana_districts %>%
+  st_make_valid() %>%
+  group_by(NAME_2_2) %>% # this takes care of the duplicate polygons and makes sure that the final number of polygons in Telangana = 33.
+  summarise() %>%
+  ungroup() %>%
+  rename(NAME_2 = NAME_2_2) %>%
+  mutate(NAME_0 = "India",
+         NAME_1 = "Telangana",
+         iso_alpha3 = "IND") %>%
+  select(iso_alpha3, NAME_0, NAME_1, NAME_2)
 
 gadm2 <- gadm2 %>%
 
   filter(!(NAME_0=="India" & NAME_1 == "Telangana")) %>%
 
-  rbind(telangana)
+  rbind(telangana_districts)
 
 
-
-# Parts of a district that got grouped to Telangana stayed in Andhra Pradesh
-
-tg_tehsils <- gadm3 %>%
-
-  filter(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_3 %in% c("Bhadrachalam","Borgampad"))
-
-
-
-tg_old_district <- gadm2 %>%
-
-  filter(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Bhadradri")
-
-
-
-diff <- st_difference(tg_tehsils, tg_old_district) %>%
-
-  st_cast("POLYGON") %>%
-
-  mutate(id = row_number()) %>%
-
-  filter(id %in% c(1,3)) %>%
-
-  select(iso_alpha3, NAME_0, NAME_1, NAME_2, NAME_3) %>%
-
-  mutate(NAME_1 = "Andhra Pradesh") %>%
-
-  mutate(NAME_2 = ifelse(NAME_3 == "Bhadrachalam", "East Godavari", "West Godavari")) %>%
-
-  select(-NAME_3)
-
-
+# andhra pradesh
 
 godavari <- gadm2 %>%
 
