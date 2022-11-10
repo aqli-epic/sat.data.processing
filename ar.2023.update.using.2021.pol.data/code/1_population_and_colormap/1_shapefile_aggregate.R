@@ -322,7 +322,7 @@ gadm2 <- gadm2 %>%
 # missing data.
 
 
-# New district in Haryana carved out of Bhiwani district
+# New district "Charkhi Dadri" in Haryana carved out of Bhiwani district (this stays)
 
 bhiwani <- gadm3 %>%
 
@@ -332,10 +332,10 @@ bhiwani <- gadm3 %>%
 
   group_by(iso_alpha3, NAME_0, NAME_1, NAME_2) %>%
 
-  summarize()
+  summarise()
 
 
-
+# replacing the current bhiwani district defintion with the above definition.
 gadm2 <- gadm2 %>%
 
   filter(!(NAME_1 == "Haryana" & NAME_2 == "Bhiwani")) %>%
