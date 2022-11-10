@@ -344,7 +344,9 @@ gadm2 <- gadm2 %>%
 
 
 
-# Correct misspelled/changed Indian district names, mostly identified by Vikram at EPIC-India
+# Correct misspelled/changed Indian district names, mostly identified by Vikram at EPIC-India.
+# Update: double checked in Nov, 2022 by Aarsh and made a couple updates. I have added a comment below
+# in front of the districts whose name has been updated.
 
 gadm2 <- gadm2 %>%
 
@@ -366,7 +368,7 @@ gadm2 <- gadm2 %>%
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Karnataka" & NAME_2 == "Bellary", "Ballari", NAME_2))%>%
 
-  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Karnataka" & NAME_2 == "Bijapur", "Vijaypura", NAME_2))%>%
+  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Karnataka" & NAME_2 == "Bijapur", "Vijayapura", NAME_2))%>% # changed Vijaypura to Vijayapura
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Karnataka" & NAME_2 == "Chikballapura", "Chikballapur", NAME_2))%>%
 
@@ -400,7 +402,7 @@ gadm2 <- gadm2 %>%
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Uttar Pradesh" & NAME_2 == "Sant Ravi Das Nagar", "Bhadohi", NAME_2))%>%
 
-  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Uttarakhand" & NAME_2 == "Garhwal", "Pauri Garhwal", NAME_2))%>%
+  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Uttarakhand" & NAME_2 == "Garhwal", "Pauri Garhwal", NAME_2))%>% # note: Garhwal is "division", "Pauri Garhwal" is a district that is a subset of that division. Because this is a district level column, we are assuming that by "garhwal", gadm actually is representing "Pauri Garhwal".
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "West Bengal" & NAME_2 == "Darjiling", "Darjeeling", NAME_2))%>%
 
@@ -408,7 +410,7 @@ gadm2 <- gadm2 %>%
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "West Bengal" & NAME_2 == "Hugli", "Hooghly", NAME_2))%>%
 
-  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Bhadradri", "Bhadradri Kothagudem", NAME_2)) %>%
+  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Bhadradri", "Bhadradri Kothagudem", NAME_2)) %>% # This has already been fixed and taken care of in the latest shapefile, but I am keeping it, just in case future shapefiles misspell it again.
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Jagitial", "Jagtial", NAME_2)) %>%
 
@@ -416,15 +418,15 @@ gadm2 <- gadm2 %>%
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Jogulamba", "Jogulamba Gadwal", NAME_2))%>%
 
-  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Komarambhem", "Kumuram Bheem", NAME_2))%>%
+  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Komarambhem", "Kumuram Bheem Asifabad", NAME_2))%>% # "Kumuram Bheem" is changed to "Kumuram Bheem Asifabad"
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Peddapalle", "Peddapalli", NAME_2)) %>%
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Rajanna", "Rajanna Sircilla", NAME_2)) %>%
 
-  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Warangal_Rural", "Warangal (Rural)", NAME_2)) %>%
+  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Warangal Rural", "Warangal (Rural)", NAME_2)) %>% # the underscore between "Warangal" and "Rural" is not present in the latest shapefile and we continue to add the brackets.
 
-  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Warangal_Urban", "Warangal (Urban)", NAME_2)) %>%
+  mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Warangal Urban", "Warangal (Urban)", NAME_2)) %>% # the underscore between "Warangal" and "Urban" is not present in the latest shapefile and we continue to add the brackets.
 
   mutate(NAME_2 = ifelse(NAME_0 == "India" & NAME_1 == "Telangana" & NAME_2 == "Yadadri", "Yadadri Bhuvanagiri", NAME_2))
 
