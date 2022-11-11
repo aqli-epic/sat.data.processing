@@ -440,14 +440,18 @@ gadm2 <- gadm2 %>%
 
 
 
-# Delete fake lake counties in the Great Lakes region. Conveniently, there are no real counties
+# Delete fake lake counties in the Great Lakes region. These are actual lakes that are listed as counties in the shape file.
+# So, we'll remove these. These lakes are spread across United States (Illinois, Indiana, Michigan, Minnesota, Ohio, New York, Wisconsin) and Canada (Ontario)
+# Note that, there is a county named "Huron" and there is also a lake of the similar name called "Lake Hurron", so we'll remove that lake, but keep the
+# county.
 
-# named exactly after the lakes.
+# This part remains as is. We remove both "Lake Hurron" and "Lake Huron" (only one of these will be present, but we are
+# just accounting for the fact that the spellings might change from one year to the next in a given shape file, we remove all of those multiple
+# spelling versions).
 
 gadm2 <- gadm2 %>%
 
   filter(!(NAME_0 %in% c("United States", "Canada") & NAME_2 %in% c("Lake Michigan", "Lake Erie", "Lake Huron", "Lake Superior", "Lake Ontario", "Lake Hurron")))
-
 
 
 # Correct outdated prefecture name in China
