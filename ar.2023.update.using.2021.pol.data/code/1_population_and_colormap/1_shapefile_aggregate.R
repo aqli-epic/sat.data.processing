@@ -487,19 +487,18 @@ gadm2 <- gadm2 %>%
 
 
 
-# Anhui, China
-
-# Chaohu Prefecture was split among Hefei, Ma'anshan, and Wuhu Prefectures in 2011
-
-# Zongyang County transferred from Anqing Prefecture to Tongling Prefecture in 2016
-
-# Shou County transferred from Lu'an Prefecutre to Huainan Prefecture in 2015
+#> Making adjustments to Anhui, China
 
 chaohu <- gadm3 %>%
 
   filter(NAME_0 == "China" & NAME_1 == "Anhui" & NAME_2 == "Chaohu")
 
 
+
+# Zongyang County transferred from Anqing Prefecture to Tongling Prefecture in 2016. For this we create a separate
+# updated shapefile for these specific regions, which will later replace their corresponding old versions in the
+# anhui part of the gadm2 shapefile. We keep this block of code to make this adjustment in case its not present in the base gadm2 shapefile
+# (as of now in the latest shapefile downloaded in October 2022, this adjustment was not present).
 
 anqing_tongling <- gadm3 %>%
 
@@ -512,6 +511,10 @@ anqing_tongling <- gadm3 %>%
   summarise()
 
 
+# Shou County transferred from Lu'an Prefecutre to Huainan Prefecture in 2015. For this we create a separate
+# updated shapefile for these specific regions, which will later replace their corresponding old versions in the
+# anhui part of the gadm2 shapefile. We keep this block of code to make this adjustment in case its not present in the base gadm2 shapefile.
+# (as of now in the latest shapefile downloaded in October 2022, this adjustment was not present)
 
 luan_huainan <- gadm3 %>%
 
@@ -524,7 +527,10 @@ luan_huainan <- gadm3 %>%
   summarise()
 
 
-
+# Chaohu Prefecture was split among Hefei, Ma'anshan, and Wuhu Prefectures in 2011.
+# (as of now in the latest shapefile downloaded in October 2022, this adjustment was not present).
+# Starting with Chaohu and making the above adjustments here we update the Anhui prefecture as a whole
+# Zongyang county adjustment to the anh
 anhui <- gadm2 %>%
 
   filter(NAME_0 == "China" & NAME_1 == "Anhui") %>%
@@ -555,6 +561,7 @@ anhui <- gadm2 %>%
 
 
 
+# then we replace the old Anhui prefecture with the updated definition of Anhui from above.
 gadm2 <- gadm2 %>%
 
   filter(!(NAME_0 == "China" & NAME_1 == "Anhui")) %>%
