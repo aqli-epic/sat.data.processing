@@ -454,7 +454,8 @@ gadm2 <- gadm2 %>%
   filter(!(NAME_0 %in% c("United States", "Canada") & NAME_2 %in% c("Lake Michigan", "Lake Erie", "Lake Huron", "Lake Superior", "Lake Ontario", "Lake Hurron")))
 
 
-# Correct outdated prefecture name in China
+# Correct outdated prefecture name in China, i.e if there is a county named "Xiangfan" change it to "Xiangyang". The older name was used from 1950 to 2010.
+# This stays.
 
 gadm2 <- gadm2 %>%
 
