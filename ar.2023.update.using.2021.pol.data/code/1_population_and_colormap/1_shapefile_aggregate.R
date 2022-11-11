@@ -463,7 +463,9 @@ gadm2 <- gadm2 %>%
 
 
 
-# Separate two prefectures in Liaoning, China that are incorrectly lumped as one
+# Separate two prefectures in Liaoning (Tieling, Yingkou), China, that are incorrectly lumped as one called "Tieling".
+# As a result, there are 2 rows in the dataset with Tieling as their "NAME_2" (i.e. 2 separate disjoint polygons in the shapefile).
+# Essentially, we are assigning one of those NAME_2 polygons the name "Yingkou". This part remains the same.
 
 tieling_yingkou <- gadm3 %>%
 
@@ -476,7 +478,7 @@ tieling_yingkou <- gadm3 %>%
   summarise()
 
 
-
+# replace the old "tieling", with the new one in which yingkou is now a separate prefecture.
 gadm2 <- gadm2 %>%
 
   filter(!(NAME_0 == "China" & NAME_1 == "Liaoning" & NAME_2 == "Tieling")) %>%
