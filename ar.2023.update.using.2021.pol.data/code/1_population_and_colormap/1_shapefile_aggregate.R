@@ -527,7 +527,7 @@ luan_huainan <- gadm3 %>%
   summarise()
 
 
-# Chaohu Prefecture was split among Hefei, Ma'anshan, and Wuhu Prefectures in 2011.
+# Chaohu Prefecture was split and absorbed by among Hefei, Ma'anshan, and Wuhu Prefectures in 2011.
 # (as of now in the latest shapefile downloaded in October 2022, this adjustment was not present).
 # Starting with Chaohu and making the above adjustments here we update the Anhui prefecture as a whole
 # Zongyang county adjustment to the anh
@@ -577,16 +577,33 @@ gadm2 <- gadm2[with(gadm2, order(NAME_0, NAME_1, NAME_2)),] %>%
   mutate(objectid = row_number())
 
 
+#> sanity checks before writing the colormap shape file
+
+# any invalid geometries?
+invalid_geom_sanity_check <- any(is.na(st_is_valid(gadm2)))
+
+# any empty geometries?
+empty_geom_sanity_check <- any(is.na(st_dimension(gadm2)))
+
+# if there are any invalid or empty geometries, stop and investigate before writing the colormap shape file.
+
+if(any(invalid_geom_sanity_check, empty_geom_sanity_check) == TRUE){
+  stop("Please resolve any invalid/empty geometries using, either st_make_valid or st_buffer with dist = 0")
+} else {
+  print("All geometries are valid. Next step: Write and save the colormap shapefile.")
+}
+
+# How to make geometries valid? (Uncomment the code below and run it, if your geometries are invalid, otherwise let it be)
+# first try and use st_make_valid. If that does not work try the following:
 
 # Resolve self-intersecting polygons, which would cause problems for st_intersection commands later in code
-
-gadm2[which(st_is_valid(gadm2) == FALSE),] <- st_buffer(gadm2[which(st_is_valid(gadm2) == FALSE),], dist = 0)
-
+#
+# gadm2[which(st_is_valid(gadm2) == FALSE),] <- st_buffer(gadm2[which(st_is_valid(gadm2) == FALSE),], dist = 0)
 
 
 # Export colormap shapefile
 
-st_write(gadm2, file.path(ddir, "color/colormap.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+st_write(gadm2, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap.shp")
 
 print("All adjustments to shapefile completed and color map shape file written.")
 
