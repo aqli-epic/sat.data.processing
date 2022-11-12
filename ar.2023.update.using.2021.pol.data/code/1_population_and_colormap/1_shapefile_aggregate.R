@@ -601,9 +601,12 @@ if(any(invalid_geom_sanity_check, empty_geom_sanity_check) == TRUE){
 # gadm2[which(st_is_valid(gadm2) == FALSE),] <- st_buffer(gadm2[which(st_is_valid(gadm2) == FALSE),], dist = 0)
 
 
+gadm2 <- st_cast(gadm2, "MULTIPOLYGON")
+
 # Export colormap shapefile
 
-st_write(gadm2, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap.shp")
+st_write(gadm2, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap.shp",
+         layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 
 print("All adjustments to shapefile completed and color map shape file written.")
 
