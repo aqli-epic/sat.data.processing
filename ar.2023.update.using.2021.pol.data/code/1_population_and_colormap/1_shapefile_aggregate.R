@@ -568,6 +568,88 @@ gadm2 <- gadm2 %>%
 
   rbind(anhui)
 
+#> grouping and summarizing duplicate rows in gadm2 shapefile----------------------- (New additions to code in November, 2022)
+
+# China-----
+
+# grouping by NAME_0, NAME_1, NAME_2 and then summarizing (which is equivalent to
+# unionizing two regions). These are neighboring polygons, which should be grouped together.
+
+china <- gadm2 %>%
+  filter(NAME_0 == "China") %>%
+  group_by(NAME_0, NAME_1, NAME_2) %>%
+  summarise() %>%
+  ungroup() %>%
+  mutate(iso_alpha3 = "CHN") %>%
+  select(iso_alpha3, everything())
+
+# replacing the current definition of china with the updated definition from above
+gadm2 <- gadm2 %>%
+  filter(NAME_0 != "China") %>%
+  rbind(china)
+
+# Arunachal Pradesh------
+
+# get rid of duplicate rows in the state of Arunachal Pradesh in India by grouping by NAME_0, NAME_1, NAME_2 and then summarizing (which is equivalent to
+# unionizing two regions). These are neighboring polygons, which should be grouped together.
+arunachal_pradesh <- gadm2 %>%
+  filter(NAME_0 == "India", NAME_1 == "Arunachal Pradesh") %>%
+  group_by(NAME_0, NAME_1, NAME_2) %>%
+  summarise() %>%
+  ungroup() %>%
+  mutate(iso_alpha3 = "IND") %>%
+  select(iso_alpha3, everything())
+
+# replacing the current definition of Arunachal Pradesh with the updated definition from above
+gadm2 <- gadm2 %>%
+  filter(!(NAME_0 == "India" & NAME_1 == "Arunachal Pradesh")) %>%
+  rbind(arunachal_pradesh)
+
+# Himachal Pradesh------
+
+# get rid of duplicate rows in the state of Himachal Pradesh in India by grouping by NAME_0, NAME_1, NAME_2 and then summarizing (which is equivalent to
+# unionizing two regions). These are neighboring polygons, which should be grouped together.
+himachal_pradesh <- gadm2 %>%
+  filter(NAME_0 == "India", NAME_1 == "Himachal Pradesh") %>%
+  group_by(NAME_0, NAME_1, NAME_2) %>%
+  summarise() %>%
+  ungroup() %>%
+  mutate(iso_alpha3 = "IND") %>%
+  select(iso_alpha3, everything())
+
+# replacing the current definition of Himachal Pradesh with the updated definition from above
+gadm2 <- gadm2 %>%
+  filter(!(NAME_0 == "India" & NAME_1 == "Himachal Pradesh")) %>%
+  rbind(himachal_pradesh)
+
+# Uttarakhand------
+
+# get rid of duplicate rows in the state of Himachal Pradesh in India by grouping by NAME_0, NAME_1, NAME_2 and then summarizing (which is equivalent to
+# unionizing two regions). These are neighboring polygons, which should be grouped together.
+uttarakhand <- gadm2 %>%
+  filter(NAME_0 == "India", NAME_1 == "Uttarakhand") %>%
+  group_by(NAME_0, NAME_1, NAME_2) %>%
+  summarise() %>%
+  ungroup() %>%
+  mutate(iso_alpha3 = "IND") %>%
+  select(iso_alpha3, everything())
+
+# replacing the current definition of Himachal Pradesh with the updated definition from above
+gadm2 <- gadm2 %>%
+  filter(!(NAME_0 == "India" & NAME_1 == "Uttarakhand")) %>%
+  rbind(uttarakhand)
+
+# England--------
+
+# Replace the current gadm2 definition of England, with the old definition of england as was used in the shapefile that
+# was used in the June, 2022 Annual Update). We use the old shapefile for england because in the new definition a lot of
+# NAME_2's were missing. Also, there were no good sources of other shapefiles out there specifically for Great Britain.
+
+england_old <- st_read("./ar.2023.update.using.2021.pol.data/data/input/shapefiles/archive/2020/united_kingdom/united_kingdom_shapefile_2020_pol_dataset.shp")
+
+gadm2 <- gadm2 %>%
+  filter(NAME_0 != "United Kingdom") %>%
+  rbind(england_old)
 
 
 # Sort and create numeric ID variable. ID name needs to be <=10 chars for export as SHP.
@@ -600,23 +682,70 @@ if(any(invalid_geom_sanity_check, empty_geom_sanity_check) == TRUE){
 #
 # gadm2[which(st_is_valid(gadm2) == FALSE),] <- st_buffer(gadm2[which(st_is_valid(gadm2) == FALSE),], dist = 0)
 
-
+# cast the gadm2 shapefile to "MULTIPOLYGON"
 gadm2 <- st_cast(gadm2, "MULTIPOLYGON")
+
+# change the spelling of United States Minor Outlying Islands to "United States Minor Outlying Islands". Its possible
+# that its not this, so accordingly make changes below in each of gadm0, gadm1, gadm2.
+gadm0 <- gadm0 %>%
+  mutate(NAME_0 = ifelse(NAME_0 == "United States Minor Outlying Isl", "United States Minor Outlying Islands", NAME_0))
+
+gadm1 <- gadm1 %>%
+  mutate(NAME_0 = ifelse(NAME_0 == "United States Minor Outlying Isl", "United States Minor Outlying Islands", NAME_0))
+
+gadm2 <- gadm2 %>%
+  mutate(NAME_0 = ifelse(NAME_0 == "United States Minor Outlying Isl", "United States Minor Outlying Islands", NAME_0))
+
+gadm3 <- gadm3 %>%
+  mutate(NAME_0 = ifelse(NAME_0 == "United States Minor Outlying Isl", "United States Minor Outlying Islands", NAME_0))
+
+# change North Macedonia to Macedonia in all shape files
+
+gadm0 <- gadm0 %>%
+  mutate(NAME_0 = ifelse(NAME_0 == "North Macedonia", "Macedonia", NAME_0))
+
+gadm1 <- gadm1 %>%
+  mutate(NAME_0 = ifelse(NAME_0 == "North Macedonia", "Macedonia", NAME_0))
+
+gadm2 <- gadm2 %>%
+  mutate(NAME_0 = ifelse(NAME_0 == "North Macedonia", "Macedonia", NAME_0))
+
+gadm3 <- gadm3 %>%
+  mutate(NAME_0 = ifelse(NAME_0 == "North Macedonia", "Macedonia", NAME_0))
 
 # Export colormap shapefile
 
-st_write(gadm2, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap.shp",
+st_write(gadm2, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap/colormap.shp",
          layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 
 print("All adjustments to shapefile completed and color map shape file written.")
 
+# Latest shapefile (Novmeber, 2022): total number of gadm2 polygons = 48,226. Corresponding past shapefile number = 48,226.
+# Latest shapefile (Novmeber, 2022): total number of gadm1 polygons = . Corresponding past shapefile number = 46,940.
+
 ######## 2. Aggregate to hover shapefile ########
 
 # List of countries for which whole country should be single hover region
+#
+# Every year update this list because sometimes the spellings of the countries changes when the shapefile
+# changes. Also, in case other countries need to be aggregated to hover level, add it to the lists below.
+#
+# This year's changes (in November, 2022): in agg0 list:
+#
+# Renuion > Réunion
+# Cape Verde > Cabo Verde
+# Saint Helena > Saint Helena, Ascension and Tris
+#
+# This year's changes (in November, 2022): in agg1 list:
+#
+# Czech Republic >  Czechia
+# Mexico > México
+# Palestina > Palestine
+#
 
 agg0 <- c("Akrotiri and Dhekelia", "American Samoa", "Andorra", "Antigua and Barbuda", "Barbados",
 
-						 "Bonaire, Sint Eustatius and Saba", "British Virgin Islands", "Cape Verde", "Cayman Islands",
+						 "Bonaire, Sint Eustatius and Saba", "British Virgin Islands", "Cabo Verde", "Cayman Islands",
 
 						 "Comoros", "Cyprus", "Dominica", "Faroe Islands", "Fiji", "French Polynesia",
 
@@ -626,7 +755,7 @@ agg0 <- c("Akrotiri and Dhekelia", "American Samoa", "Andorra", "Antigua and Bar
 
 						 "New Caledonia", "Northern Cyprus", "Northern Mariana Islands", "Palau", "Puerto Rico",
 
-						 "Reunion", "Saint Helena", "Saint Kitts and Nevis", "Saint Lucia", "Saint Pierre and Miquelon",
+						 "Réunion", "Saint Helena, Ascension and Tris", "Saint Kitts and Nevis", "Saint Lucia", "Saint Pierre and Miquelon",
 
 						 "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Seychelles",
 
@@ -636,7 +765,7 @@ agg0 <- c("Akrotiri and Dhekelia", "American Samoa", "Andorra", "Antigua and Bar
 
 						 "Vanuatu", "Virgin Islands, U.S.", "Wallis and Futuna")
 
-# Aland, Sao Tome and Principe have Unicode characters in their names which can cause problems,
+# Åland, São Tomé and Príncipe have Unicode characters in their names which can cause problems,
 
 # so use ISO code to get them
 
@@ -650,7 +779,7 @@ agg1 <- c("Afghanistan", "Algeria", "Argentina", "Armenia", "Australia", "Austri
 
 						 "Azerbaijan", "Bahamas", "Benin", "Bhutan", "Brazil",
 
-						 "Brunei", "Bulgaria", "Burundi", "Cambodia", "Colombia", "Costa Rica", "Croatia", "Cuba", "Czech Republic",
+						 "Brunei", "Bulgaria", "Burundi", "Cambodia", "Colombia", "Costa Rica", "Croatia", "Cuba", "Czechia",
 
 						 "Denmark", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Estonia",
 
@@ -662,11 +791,11 @@ agg1 <- c("Afghanistan", "Algeria", "Argentina", "Armenia", "Australia", "Austri
 
 						 "Kyrgyzstan", "Laos", "Lebanon", "Lesotho", "Liberia",
 
-						 "Libya", "Macedonia", "Malawi", "Mexico", "Mongolia", "Namibia",
+						 "Libya", "Macedonia", "Malawi", "México", "Mongolia", "Namibia",
 
 						 "Netherlands", "New Zealand", "Nicaragua", "Nigeria", "North Korea", "Norway",
 
-						 "Palestina", "Panama", "Paraguay", "Philippines", "Poland", "Portugal",
+						 "Palestine", "Panama", "Paraguay", "Philippines", "Poland", "Portugal",
 
 						 "Romania", "Russia", "Rwanda", "Senegal", "Serbia", "Slovakia", "Slovenia",
 
@@ -703,12 +832,10 @@ hover <- gadm0 %>%
 
 
 # Add in admin1-level polygons for countries in agg1
-
 # Note: If any of the countries in agg1 were modified manually above, then
-
 # their admin1 polygons in gadm1 are possibly wrong. In this case, for those
-
-# countries, start with gadm2, group by NAME_1, and summarize.
+# countries, start with gadm2, group by NAME_1, and summarize (in November, 2022 there was no
+# country in the agg1 list that was modified manually).
 
 hover <- gadm1 %>%
 
@@ -720,7 +847,7 @@ hover <- gadm1 %>%
 
 
 
-# Create ID
+# # Sort and create numeric ID variable. ID name needs to be <=10 chars for export as SHP.
 
 hover <- hover[with(hover, order(NAME_0, NAME_1, NAME_2)),] %>%
 
@@ -728,15 +855,16 @@ hover <- hover[with(hover, order(NAME_0, NAME_1, NAME_2)),] %>%
 
 
 
-# Export as shapefile
+# Export the hover object as a hover shapefile
 
-st_write(hover, file.path(ddir, "county_hover/hover.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+st_write(hover, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/hover/hover.shp",
+         layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 
 
 print("Hover map shape file written")
 
 
-######## 3. Generate hover/color crosswalk file ########
+######## 3. Generate hover/color crosswalk file (i.e. a file that links hover and color object ids) ########
 
 # Make sure region names uniquely identify observations
 
@@ -788,7 +916,9 @@ assert_that(any(duplicated(data.table(hover_color_cw)))==FALSE)
 
 # Export as text file
 
-write.table(hover_color_cw, file = file.path(ddir, "crosswalks/gadm_hover_color_crosswalk.txt"), row.names = FALSE, quote = FALSE, sep = ",")
+write.table(hover_color_cw,
+ file = "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/crosswalks/gadm_hover_color/gadm_hover_color_crosswalk.txt",
+ row.names = FALSE, quote = FALSE, sep = ",")
 
 
 print("hover/color crosswalk file written")
@@ -809,7 +939,8 @@ us_state <- us_state[with(us_state, order(NAME_1)),] %>%
 
   tibble::rowid_to_column("id_state")
 
-st_write(us_state, file.path(ddir, "usa_india_china_state/USA_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+st_write(us_state, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/usa_india_china_state_wise/usa/USA_adm1.shp",
+         layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 
 
 
@@ -827,7 +958,7 @@ china_state <- china_state[with(china_state, order(NAME_1)),] %>%
 
   tibble::rowid_to_column("id_state")
 
-st_write(china_state, file.path(ddir, "usa_india_china_state/CHN_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+st_write(china_state, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/usa_india_china_state_wise/china/CHN_adm1.shp", layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 
 
 
@@ -845,13 +976,17 @@ india_state <- india_state[with(india_state, order(NAME_1)),] %>%
 
   tibble::rowid_to_column("id_state")
 
-st_write(india_state, file.path(ddir, "usa_india_china_state/IND_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+st_write(india_state, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/usa_india_china_state_wise/india/IND_adm1.shp" , layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 
 
 print("USA/India/China state shape files written")
 
+
+
 ######## 5. Generate crosswalk files between US China India state/province and hover regions ########
 
+
+# crosswalk (joining 2 files) between a a US state color and hover file
 us_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid),
 
     us_state %>% st_set_geometry(NULL)%>% rename(objectid_state = id_state),
@@ -862,10 +997,10 @@ us_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_ho
 
 assert_that(nrow(us_state_cw)==nrow(hover %>% filter(NAME_0=="United States")))
 
-write.table(us_state_cw, file = file.path(ddir, "crosswalks/USA_state_hover_crosswalk.txt"), row.names = FALSE, quote = FALSE, sep = ",")
+write.table(us_state_cw, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/crosswalks/usa_state_color_hover/usa_state_color_hover_crosswalk.txt", row.names = FALSE, quote = FALSE, sep = ",")
 
 
-
+# crosswalk (joining 2 files) between a a China state color and hover file
 china_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid),
 
     china_state %>% st_set_geometry(NULL)%>% rename(objectid_state = id_state),
@@ -876,10 +1011,10 @@ china_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid
 
 assert_that(nrow(china_state_cw)==nrow(hover %>% filter(NAME_0=="China")))
 
-write.table(china_state_cw, file = file.path(ddir, "crosswalks/China_state_hover_crosswalk.txt"), row.names = FALSE, quote = FALSE, sep = ",")
+write.table(china_state_cw, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/crosswalks/china_state_color_hover/china_state_color_hover_crosswalk.txt", row.names = FALSE, quote = FALSE, sep = ",")
 
 
-
+# crosswalk (joining 2 files) between a an Indian state color and hover file
 india_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid),
 
     india_state %>% st_set_geometry(NULL)%>% rename(objectid_state = id_state),
@@ -890,19 +1025,22 @@ india_state_cw <- inner_join(hover %>% st_set_geometry(NULL) %>% rename(objectid
 
 assert_that(nrow(india_state_cw)==nrow(hover %>% filter(NAME_0=="India")))
 
-write.table(india_state_cw, file = file.path(ddir, "crosswalks/India_state_hover_crosswalk.txt"), row.names = FALSE, quote = FALSE, sep = ",")
+write.table(india_state_cw, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/crosswalks/india_state_color_hover/india_state_color_hover_crosswalk.txt", row.names = FALSE, quote = FALSE, sep = ",")
 
 
 print("USA, India, China State cross walks written")
 
+
+
 ######## 6. Generate colormap/national PM2.5 standard correspondance and objectid/region name files ########
 
-standards <- read_dta("C:/Arc/Preserve/data/standards/country_standards.dta") %>%
+
+# country wise Annual Average PM2.5 standards (last updated in March 2022), to be updated again in November, 2022.
+standards <- read_dta("./ar.2023.update.using.2021.pol.data/data/input/standards/archive/2020/country_standards.dta") %>%
 
   rename(NAME_0 = Country, pm25standard = PM25Standard)
 
-
-
+# create a crosswalk between gadm2 and country standards
 color_country_cw <- gadm2 %>%
 
   st_set_geometry(NULL) %>%
@@ -912,20 +1050,20 @@ color_country_cw <- gadm2 %>%
   select(objectid, pm25standard)
 
 
+# write color_country crosswalk
+write_dta(color_country_cw, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/crosswalks/colormap_country_standards/colormap_country_standards.dta")
 
-write_dta(color_country_cw, "C:/Arc/Preserve/data/standards/colormap_country_standards.dta")
-
-
-
+# create a file that stores the non-geometry columns of the gadm2 file, call that color_names
 color_names <- gadm2 %>% st_set_geometry(NULL) %>% rename(objectid_color = objectid)
 
-write_dta(color_names, file.path(ddir, "crosswalks/color_names.dta"))
+# write the color_names dta file
+write_dta(color_names, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/color_names.dta")
 
-
-
+# create a crosswalk between hover and country standards
 hover_names <- hover %>% st_set_geometry(NULL) %>% rename(objectid_hover = objectid)
 
-write_dta(hover_names, file.path(ddir, "crosswalks/hover_names.dta"))
+# write the hover_names dta file
+write_dta(hover_names, "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/hover_names.dta")
 
 print("All Done!")
 

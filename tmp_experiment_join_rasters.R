@@ -18,10 +18,10 @@ start_year <- 1998
 end_year <- 2021
 
 # set path variables
-pop_dir <- "./data/input/population/"
-shp_dir <- "./data/input/shapefiles/gadm_410-levels/"
-pol_dir <- "./data/input/pollution/0.1x0.1/"
-out_dir <- "./data/output"
+pop_dir <- "./ar.2023.update.using.2021.pol.data/data/input/population/"
+shp_dir <- "./ar.2023.update.using.2021.pol.data/data/input/shapefiles/gadm_410-levels/"
+pol_dir <- "./ar.2023.update.using.2021.pol.data/data/input/pollution/0.1x0.1/"
+out_dir <- ".ar.2023.update.using.2021.pol.data/data/output"
 
 # Raster functions are amenable to parallelization
 beginCluster()
@@ -59,7 +59,7 @@ beginCluster()
 
 
 ### MATCH POPULATION TO POLLUTION
-	landscan <- raster(file.path(pop_dir, "/Raw/landscan", pop_year, "/lspop", pop_year, fsep = ""))
+	landscan <- raster("C:/Users/Aarsh/Desktop/aqli-epic/sat.data.processing/ar.2023.update.using.2021.pol.data/data/input/population/landscan-global-2021.tif")
 	# Confirm orientation of landscan raster. Remember x = longitude, y = latitude
 	assert_that(min(bbox(landscan) == matrix(c(-180,-90,180,90),nrow=2,ncol=2)) == 1)
 	# Pollution rasters don't cover north of 70N or south of 60S latitude. Crop
@@ -72,22 +72,20 @@ beginCluster()
 	# interpolation.
 	# First, make sure resolution of pollution data is integer multiple of resolution of LandScan data
 	factor <- dim(landscan_cropped)[1:2]/dim(brick)[1:2]
-	assert_that(identical(factor, round(factor))) # and in particular, both should be 6
+	assert_that(identical(factor, round(factor))) # and in particular, both should be 6 (for 0.05x0.05 resolution pollution data, as resolution changes, this number will change proportionally, I guess?)
 	# Next, disaggregate and save result to file so as not to have to run the time-consuming disaggregation
 	# step again if process crashes before finishing for any reason
 	print("Beginning to disaggregate pollution rasters")
-	brick <- disaggregate(brick, fact = factor,
-		filename=file.path(out_dir, "/", update_year, "update/pollution_disagged.tif", fsep = ""),
-		format = "GTiff", overwrite = TRUE)
+	brick <- raster::disaggregate(brick, fact = factor)
 
 	# Now can add population layer to brick, hence matching each population point to a pollution value
-	values(landscan_cropped)[values(landscan_cropped)==0] = NA
+	values(landscan_cropped)[values(landscan_cropped)==0] <- NA
 	names(landscan_cropped) <- "population"
 	brick <- brick %>% addLayer(landscan_cropped)
 
 ### MATCH TO COLORMAP POLYGONS
 	# Read in colormap polygons
-	colormap <- st_read(file.path(shp_dir, "color/colormap.shp"), stringsAsFactors = FALSE)
+	colormap <- st_read("C:/Users/Aarsh/Desktop/aqli-epic/sat.data.processing/ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap.shp", stringsAsFactors = FALSE)
 
 	# Now match each population/pollution point to a colormap polygon. To do this, convert
 	# polygons to raster of same resolution as population raster, with value of each cell equal
@@ -101,8 +99,8 @@ beginCluster()
 	brick <- brick %>% addLayer(polygon_cells)
 
 ### EXPORT RASTER STACK
-	writeRaster(brick, filename=file.path(out_dir, "/", update_year, "update/all_layers.tif", fsep = ""),
-		format = "GTiff", overwrite = TRUE)
+	raster::writeRaster(brick, filename = file.path("C:/Users/Aarsh/Desktop/aqli-epic", "sat.data.processing/all_layers.tif",
+	                                        fsep = ""), format = "GTiff", overwrite = TRUE)
 
 	# SANITY CHECK export a piece of the brick
 	tile <- brick %>% crop(extent(105, 120, 15, 30))
