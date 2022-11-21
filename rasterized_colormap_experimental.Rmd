@@ -17,25 +17,41 @@ library(fasterize)
 library(sf)
 library(SpaDES)
 library(foster) # for matching resolution of 2 different rasters
+
+# global variables (check for updates, if any)
+who_pm2.5_standard <- 5 # in micrograms per cubic meter, annual average PM2.5 standard
+aqli_lyl_constant <- 0.098
+india_pm2.5_standard <- 40 # in micrograms per cubic meter
+
 ```
 
+# load in raw master pollution and population datasets and making sure that their CRS are the same
 
-# create a raster based population weighted pollution map for LA in the colors similar to how plume labs map
 ```{r}
-# load raw global pollution raster for AQLI 2021 (2023 release) dataset and setting a crs
+# load raw global pollution raster for AQLI 2021 (2023 release) dataset
 pol_raw_0.01 <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/pollution/0.01x0.01/V5GL03.HybridPM25-NoDust-NoSeaSalt.Global.202101-202112.nc")
-crs(pol_raw_0.01) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-names(pol_raw_0.01) <- "pm2021"
 
-
-# load latest (2021, as on Novmeber, 2022) Landscan raw global population raster and setting a crs
+# load latest (2021, as on Novmeber, 2022) Landscan raw global population raster
 pop_raw_landscan <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/population/landscan-global-2021.tif")
-crs(pop_raw_landscan) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-names(pop_raw_landscan) <- "landscan2021"
 
 
 # load latest colormap shapefile for (last complete updated: November, 2022)
 colormap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap/colormap.shp")
+
+# naming the raw global pollution data and setting its crs
+crs(pol_raw_0.01) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+names(pol_raw_0.01) <- "pm2021"
+
+# naming the raw global landscan population data and setting its crs to be the same as the pollution data
+crs(pop_raw_landscan) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+names(pop_raw_landscan) <- "landscan2021"
+```
+
+
+
+
+# create a raster based population weighted pollution map for LA in the colors similar to how plume labs map
+```{r}
 
 # crop colormap to the extent of Los Angeles
 colormap_la <- colormap %>%
@@ -76,6 +92,103 @@ names(pol_raw_0.01_la) <- "lyl"
 
 writeRaster(pol_raw_0.01_la, "./qgis_experimentation/pol_raw_0.01_unweighted_lyl_months.tif")
 
+
+```
+
+# Using the new workflow, generate county level population weighted pollution and life years lost numbers (WHO and National Standard) for India.
+
+```{r}
+# crop colormap to the extent of the US
+colormap_india <- colormap %>%
+   filter(NAME_0 == "India")
+
+# cropping pollution 0.01 data to the extent of the US
+pol_raw_0.01_india <- raster::crop(pol_raw_0.01, colormap_india)
+
+# cropping landscan 0.008333 res data to the extent of the US
+pop_raw_landscan_india <- raster::crop(pop_raw_landscan, colormap_india)
+
+# matching the resolution of the cropped population and pollution datasets
+pol_0.01_india_in_landscan_pop_res <- foster::matchResolution(pol_raw_0.01_india, pop_raw_landscan_india)
+
+# creating a life years lost to WHO layer for India
+pol_values_india <- values(pol_raw_0.01_india)
+
+# creating a raster brick using the population and pollution data for India.
+india_raster_brick <- pop_raw_landscan_india %>% 
+  addLayer(pol_0.01_india_in_landscan_pop_res) %>%
+  addLayer(pol_0.01_india_in_landscan_pop_res) %>%
+  addLayer(pol_0.01_india_in_landscan_pop_res)
+
+# setting the names of the newly created placheoldes
+names(india_raster_brick) <- c("population_2021", "pollution_2021", "lyl_who_standard", "lyl_nat_standard")
+
+# generating values for layers containing lyl numbers relative to WHO standard
+india_pollution_numbers <- values(india_raster_brick$pollution_2021)
+india_lyl_numbers_who <- (india_pollution_numbers - who_pm2.5_standard)*aqli_lyl_constant
+india_lyl_numbers_who <- ifelse(india_lyl_numbers_who < 0, 0, india_lyl_numbers_who)
+
+# generating values for layers containing lyl numbes relative to the National standard
+india_lyl_numbers_nat_standard <- (india_pollution_numbers - india_pm2.5_standard) * aqli_lyl_constant
+india_lyl_numbers_nat_standard <- ifelse(india_lyl_numbers_nat_standard < 0, 0, india_lyl_numbers_nat_standard)
+
+# updating the lyl layers with the above values
+values(india_raster_brick$lyl_who_standard) <- india_lyl_numbers_who
+values(india_raster_brick$lyl_nat_standard) <- india_lyl_numbers_nat_standard
+
+# set the same crs for india pollution brick
+crs(india_raster_brick) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+
+# Now match each population/pollution point to a colormap polygon. To do this, convert
+# polygons to raster of same resolution as population raster, with value of each cell equal
+# to objectid of polygon that covers its center.
+# Fasterize is an ultra-fast version of the rasterize function.
+print("Beginning to rasterize colormap shapefile")
+polygon_cells <- fasterize(colormap_india, pol_0.01_india_in_landscan_pop_res, field = "objectid", fun = "last")
+writeRaster(polygon_cells,
+	filename = "./qgis_experimentation/colormap_india_rasterized.tif",
+	format = "GTiff", overwrite = TRUE)
+
+india_raster_brick <- india_raster_brick %>% addLayer(polygon_cells)
+
+names(india_raster_brick)[length(names(india_raster_brick))] <- "colormap_objectid"
+
+# convert to dataframe
+india_raster_brick_df <- raster::as.data.frame(india_raster_brick)
+
+# join with colormap (sans geometry)
+india_raster_brick_df_joined_colormap <- india_raster_brick_df %>%
+  left_join(colormap_india %>% st_drop_geometry(), by = c("colormap_objectid" = "objectid"))
+
+# group by object id (which is gadm level 2) and create a population weighted average of pollution 
+
+india_raster_brick_df_joined_colormap_summary <- india_raster_brick_df_joined_colormap %>%
+  dplyr::group_by(colormap_objectid) %>%
+  dplyr::mutate(pop_weights_gadm2  = population_2021/sum(population_2021, na.rm = TRUE),
+                pm2021_pop_weighted = pollution_2021*pop_weights_gadm2) %>%
+  dplyr::summarise(avg_pm2.5_2021 = sum(pm2021_pop_weighted, na.rm = TRUE)) %>%
+  rename(objectid = colormap_objectid)
+
+# join with colormap (with geometry)
+india_raster_brick_df_joined_colormap_summary_geom <- india_raster_brick_df_joined_colormap_summary %>%
+  left_join(colormap_india, by = "objectid")
+
+# add lyl relative to WHO and National Standard column
+india_raster_brick_df_joined_colormap_summary_geom <- india_raster_brick_df_joined_colormap_summary_geom %>%
+  mutate(lyl_rel_who_2021 = (avg_pm2.5_2021 - who_pm2.5_standard) * aqli_lyl_constant, 
+         lyl_rel_who_2021 = ifelse(lyl_rel_who_2021 < 0, 0, lyl_rel_who_2021), 
+         lyl_rel_nat_stan_2021  = (avg_pm2.5_2021 - india_pm2.5_standard) * aqli_lyl_constant, 
+         lyl_rel_nat_stan_2021 = ifelse(lyl_rel_nat_stan_2021 < 0, 0, lyl_rel_nat_stan_2021)) %>%
+  select(objectid:NAME_2, lyl_rel_who_2021, lyl_rel_nat_stan_2021, everything()) 
+  
+india_raster_brick_df_joined_colormap_summary_geom <- st_as_sf(india_raster_brick_df_joined_colormap_summary_geom)
+  
+foo_plt <- india_raster_brick_df_joined_colormap_summary_geom %>%
+  ggplot() +
+  geom_sf(mapping = aes(fill = avg_pm2.5_2021)) + 
+  scale_fill_viridis_c()
+
+st_write(india_raster_brick_df_joined_colormap_summary_geom, "./qgis_experimentation/india_final_colormap_rasterized.shp")
 
 ```
 
