@@ -1,0 +1,81 @@
+---
+title: "0.raw_netcdf_file_plot"
+author: "Aarsh"
+date: '2022-10-18'
+output: html_document
+---
+
+# setup
+```{r}
+# load libraries
+library(raster)
+library(rgdal)
+library(dplyr)
+library(ncdf4)
+library(assertthat)
+library(fasterize)
+library(sf)
+library(SpaDES)
+library(foster) # for matching resolution of 2 different rasters
+```
+
+
+# create a raster based population weighted pollution map for LA in the colors similar to how plume labs map
+```{r}
+# load raw global pollution raster for AQLI 2021 (2023 release) dataset and setting a crs
+pol_raw_0.01 <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/pollution/0.01x0.01/V5GL03.HybridPM25-NoDust-NoSeaSalt.Global.202101-202112.nc")
+crs(pol_raw_0.01) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+names(pol_raw_0.01) <- "pm2021"
+
+
+# load latest (2021, as on Novmeber, 2022) Landscan raw global population raster and setting a crs
+pop_raw_landscan <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/population/landscan-global-2021.tif")
+crs(pop_raw_landscan) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+names(pop_raw_landscan) <- "landscan2021"
+
+
+# load latest colormap shapefile for (last complete updated: November, 2022)
+colormap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap/colormap.shp")
+
+# crop colormap to the extent of Los Angeles
+colormap_la <- colormap %>%
+   filter(NAME_2 %in% "Los Angeles")
+
+# cropping pollution 0.01 data to the extent of LA
+pol_raw_0.01_la <- raster::crop(pol_raw_0.01, colormap_la)
+
+# cropping landscan 0.008333 res data to the extent of LA
+pop_raw_landscan_la <- raster::crop(pop_raw_landscan, colormap_la)
+
+# matching the resolution of the cropped population and pollution datasets
+pol_0.01_in_landscan_pop_res <- foster::matchResolution(pol_raw_0.01_la, pop_raw_landscan_la)
+
+# creating a population weighted pollution average per pixel
+pop_weighted_pol_average_raster <- pol_0.01_in_landscan_pop_res * (pop_raw_landscan_la/sum(values(pop_raw_landscan_la), na.rm = TRUE))
+
+# sanity checks on values in the above rasters
+values_pop_weighted_pol <- values(pop_weighted_pol_average_raster)
+values_pol_raw_0.01 <- values(pol_0.01_in_landscan_pop_res)
+values_pop_raw <- values(pop_raw_landscan_la)
+
+length(which(!is.na(values_pol_raw_0.01) & !is.na(values_pop_weighted_pol) & !is.na(values_pop_raw)))/length(which(!is.na(values_pol_raw_0.01)))
+
+# writing and experimenting in QGIS
+writeRaster(pop_weighted_pol_average_raster, "./qgis_experimentation/pop_weighted_pol_average_raster.tif")
+
+# creating a life years lost layer
+lyl_unweighted_pol_0.01 <- (values_pol_raw_0.01 - 5)*0.098
+lyl_unweighted_pol_0.01 <- ifelse(lyl_unweighted_pol_0.01 < 0, 0, lyl_unweighted_pol_0.01)
+lyl_unweighted_pol_0.01_months <- round(lyl_unweighted_pol_0.01 * 12, 1)
+
+values(pol_raw_0.01_la) <- lyl_unweighted_pol_0.01_months
+
+pol_raw_0.01_la_unweighted_lyl 
+
+names(pol_raw_0.01_la) <- "lyl"
+
+writeRaster(pol_raw_0.01_la, "./qgis_experimentation/pol_raw_0.01_unweighted_lyl_months.tif")
+
+
+```
+
