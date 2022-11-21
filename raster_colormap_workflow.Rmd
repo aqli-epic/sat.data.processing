@@ -1,5 +1,12 @@
-# Join Rasters.R - Experimenting with a new AQLI backend workflow----------------
+---
+title: "0.raw_netcdf_file_plot"
+author: "Aarsh"
+date: '2022-10-18'
+output: html_document
+---
 
+# setup
+```{r}
 # load libraries
 library(raster)
 library(rgdal)
@@ -9,7 +16,11 @@ library(assertthat)
 library(fasterize)
 library(sf)
 library(SpaDES)
+```
 
+
+# raster based colormap workflow experimentation
+```{r}
 # set global parameters
 pop_year <- 2021
 update_year <- 2021
@@ -109,3 +120,6 @@ beginCluster()
 		format="GTiff", overwrite = TRUE)
 
 endCluster()
+
+```
+
