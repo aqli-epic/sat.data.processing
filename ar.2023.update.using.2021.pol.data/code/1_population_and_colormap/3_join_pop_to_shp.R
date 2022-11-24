@@ -24,9 +24,10 @@
 
 ####################################################
 
+# benchmarking
 code_run_start_time <- Sys.time()
 
-
+# read in libraries
 library(raster)
 
 library(sf)
@@ -37,37 +38,45 @@ library(purrr)
 
 library(nngeo)
 
+library(stringr)
+
+# turn off s2 processing
+sf::sf_use_s2(FALSE)
 
 
-pop_year <- 2019
+# set raw population data year
+pop_year <- 2021
 
-
-
+#
 pop_dir <- "C:/Arc/Preserve/data/population"
 
 shp_dir <- "C:/Arc/Preserve/data/shapefiles"
 
 
-
+# loop start and end indices (looping over each of 25 population tiles, created in the last script)
 start_i <- 1
 
 end_i <- 25
 
 
-
-colormap <- st_read(file.path(shp_dir, "color/colormap.shp"), stringsAsFactors = FALSE) %>%
+# load in colormap shapefile
+colormap <- st_read("ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap/colormap.shp", stringsAsFactors = FALSE) %>%
 
 			dplyr::select(objectid, geometry)
 
+colormap <- colormap %>%
+  st_make_valid()
+
 colormap <- colormap[with(colormap, order(objectid)),]
 
-
-
+# Iterate over each population raster tile, convert it to a point based shape file and attempt to join that point based shape file to the colormap
+# Multipolygon based shape file.
 for(i in start_i:end_i){
 
   # Read in raster tile
 
-  raster_i <- raster(file.path(pop_dir, "/intermediate/split_raster/", pop_year, "/lspop", pop_year, "_tile", i, ".grd", fsep = ""))
+  raster_i <- raster(file.path("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/2_read_landscan_raster/split_raster/", "landscan.global.2021",
+                               "_tile", i, ".grd", fsep = ""))
 
   print(i)
 
@@ -81,7 +90,8 @@ for(i in start_i:end_i){
 
     data.frame() %>%
 
-    sf::st_as_sf(coords = c("x", "y"))
+    sf::st_as_sf(coords = c("x", "y")) %>%
+    st_make_valid()
 
   end_time <- Sys.time()
 
@@ -99,10 +109,7 @@ for(i in start_i:end_i){
 
   }
 
-
-
   # Set Coordinate Reference System of pop points to be same as colormap
-
 
   print(i)
 
@@ -140,14 +147,18 @@ for(i in start_i:end_i){
 
   print(i)
 
-  st_write(joined, file.path(pop_dir, "/intermediate/pop_points_joined_notjoined/joined/", pop_year, "/pop_joined_", i, ".shp", fsep = ""), delete_layer = TRUE)
+  st_write(joined, file.path("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/3_join_pop_to_shp/joined/",
+          "pop_joined", i, ".shp", fsep = ""), delete_layer = TRUE)
 
-  st_write(not_joined, file.path(pop_dir, "/intermediate/pop_points_joined_notjoined/notjoined/", pop_year, "/pop_notjoined_", i, ".shp", fsep = ""), delete_layer = TRUE)
-
+  st_write(not_joined, file.path("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/3_join_pop_to_shp/not_joined/",
+           "pop_notjoined", i, ".shp", fsep = ""), delete_layer = TRUE)
 
 }
 
 
+# alternative workflow (instead of using the for loop above, we can use the map function with a r2p_join custom function below). I did not use it
+# because I found that it was helpful to see the progress (also easier to debug) using the for loop workflow. But, keeping the below code commented
+# in case someone wants to use it.
 
 # Using the "map" function------------------------------------------------------------------------------------
 
@@ -241,6 +252,7 @@ for(i in start_i:end_i){
 # Using the "map" function-----------------------------------------------------------------------------------
 
 
+# print end time and calculate elapsed time
 
 print("3_raster_to_points.R COMPLETED")
 
