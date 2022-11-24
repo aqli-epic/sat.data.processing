@@ -246,6 +246,6 @@ print("3_raster_to_points.R COMPLETED")
 
 code_run_end_time <- Sys.time()
 
-elapsed_time <- code_run_end_time - code_run_start_time
+elapsed_time <- code_run_end_time - code_run_start_time # 1hr 56 minutes
 
 print(str_c("Elapsed Time: ", elapsed_time, sep =" "))
