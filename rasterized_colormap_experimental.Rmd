@@ -20,6 +20,9 @@ library(foster) # for matching resolution of 2 different rasters
 library(DBI) # for connecting R with Postgres
 library(RPostgres)
 library(ggplot2)
+library(RPostgres)
+library(sparklyr)
+library(data.table)
 
 # global variables (check for updates, if any)
 who_pm2.5_standard <- 5 # in micrograms per cubic meter, annual average PM2.5 standard
@@ -74,8 +77,23 @@ pop_raw_landscan_la <- raster::crop(pop_raw_landscan, colormap_la)
 # matching the resolution of the cropped population and pollution datasets
 pol_0.01_in_landscan_pop_res <- foster::matchResolution(pol_raw_0.01_la, pop_raw_landscan_la)
 
-# creating a population weighted pollution average per pixel
-pop_weighted_pol_average_raster <- pol_0.01_in_landscan_pop_res * (pop_raw_landscan_la/sum(values(pop_raw_landscan_la), na.rm = TRUE))
+names(pol_0.01_in_landscan_pop_res) <- "pol_raw_raster_data"
+
+pol_0.01_in_landscan_pop_res_df <- raster:as.data.frame(pol_0.01_in_landscan_pop_res)
+
+la_values_hist_df <- data.frame(pol_la = values(pol_0.01_in_landscan_pop_res))
+
+la_values_hist_plot <- la_values_hist_df %>%
+  ggplot() +
+  geom_histogram(mapping = aes(x = pol_la), color = "white", fill = "cornflowerblue") +
+  labs(x = "PM2.5 pollution (in µg/m³)",  y = "Count", title = "Distribution of PM2.5 pollution across LA", 
+       subtitle = "AQLI 2021 pollution data at 0.01 deg lat x 0.01 deg lon resolution") +
+  scale_y_continuous(breaks = seq(0, 2000, 200)) +
+  scale_x_continuous(breaks = seq(0, 20, 2)) +
+  ggthemes::theme_hc()
+
+# # creating a population weighted pollution average per pixel
+# pop_weighted_pol_average_raster <- pol_0.01_in_landscan_pop_res * (pop_raw_landscan_la/sum(values(pop_raw_landscan_la), na.rm = TRUE))
 
 # sanity checks on values in the above rasters
 values_pop_weighted_pol <- values(pop_weighted_pol_average_raster)
@@ -212,7 +230,7 @@ st_write(india_raster_brick_df_joined_colormap_summary_geom, "./qgis_experimenta
 ```{r}
 # crop colormap to the extent of region
 colormap_region <- colormap %>%
-   filter(NAME_0 == "United States")
+   filter(NAME_0 == "Cameroon")
 
 # cropping pollution 0.01 data to the extent of the region
 pol_raw_0.01_region <- raster::crop(pol_raw_0.01, colormap_region)
@@ -298,14 +316,17 @@ region_raster_brick_df_joined_colormap_summary_geom <- st_as_sf(region_raster_br
 foo_plt <- region_raster_brick_df_joined_colormap_summary_geom %>%
   ggplot() +
   geom_sf(mapping = aes(fill = lyl_rel_who_2021)) + 
-  scale_fill_viridis_b(breaks = c(0, 0.1, 0.5, 1, 2, 3, 4, 5, 6), option = "rocket", direction = -1)
+  scale_fill_viridis_b(option = "rocket", direction = -1) + 
+  ggthemes::theme_map() +
+   labs(title = "Cameroon: Life years lost relative to WHO guideline", 
+       subtitle = "using AQLI 2021 0.01x0.01 res pollution data")
 
 foo <- region_raster_brick_df_joined_colormap_summary_geom %>%
   ggplot() +
   geom_sf(mapping = aes(fill = lyl_rel_who_2021)) + 
-  scale_fill_viridis_b(breaks = c(0, 0.1, 0.5, 1, 2, 3, 4, 5, 6))
-
-foo_plt
+  scale_fill_viridis_b(breaks = c(0, 0.1, 0.5, 1, 2, 3, 4, 5, 6)) +
+  labs(title = "Cameroon: Life years lost relative to WHO guideline", 
+       subtitle = "using AQLI 2021 0.01x0.01 res pollution data")
 
 ```
 
@@ -389,11 +410,34 @@ region_raster_brick_df <- raster::as.data.frame(region_raster_brick)
 
 print("raster brick converted to data frame")
 
+end_time <- Sys.time()
 
+# write region_raster_brick_df to a csv
+region_raster_brick_df %>% data.table::fwrite("./qgis_experimentation/pol_0.01_2021_data.csv")
+
+#> experimenting with postgres and sparklyr to l
+
+# postgres
+
+con <- dbConnect(drv = RPostgres::Postgres(),
+                 host = "localhost",
+                 port = "5432", 
+                 user = "postgres", 
+                 password = "aarshepicindia", 
+                 dbname = "postgres")
+
+# sparklyr
+sc <- spark_connect(master = "local")
+sparklyr::spark_read_csv(sc, "pol_0.01_2021_data_with_gadm_columns", "./qgis_experimentation/pol_data_with_gadm_columns.csv")
 
 # join with colormap (sans geometry)
-region_raster_brick_df_joined_colormap <- region_raster_brick_df %>%
+region_raster_brick_df_joined_colormap <- region_raster_brick_df_test %>%
   left_join(colormap_region %>% st_drop_geometry(), by = c("colormap_objectid" = "objectid"))
+
+data.table::fwrite(region_raster_brick_df_joined_colormap, "./qgis_experimentation/pol_0.01_2021_data_with_gadm_columns.csv")
+
+
+
 
 # group by object id (which is gadm level 2) and create a population weighted average of pollution 
 
