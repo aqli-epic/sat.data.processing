@@ -60,7 +60,6 @@ print("raw data files read in")
 
 
 
-
 # create a raster based population weighted pollution map for LA in the colors similar to how plume labs map
 ```{r}
 
@@ -230,7 +229,7 @@ st_write(india_raster_brick_df_joined_colormap_summary_geom, "./qgis_experimenta
 ```{r}
 # crop colormap to the extent of region
 colormap_region <- colormap %>%
-   filter(NAME_0 == "Cameroon")
+   filter(NAME_0 == "Kenya")
 
 # cropping pollution 0.01 data to the extent of the region
 pol_raw_0.01_region <- raster::crop(pol_raw_0.01, colormap_region)
@@ -318,14 +317,14 @@ foo_plt <- region_raster_brick_df_joined_colormap_summary_geom %>%
   geom_sf(mapping = aes(fill = lyl_rel_who_2021)) + 
   scale_fill_viridis_b(option = "rocket", direction = -1) + 
   ggthemes::theme_map() +
-   labs(title = "Cameroon: Life years lost relative to WHO guideline", 
-       subtitle = "using AQLI 2021 0.01x0.01 res pollution data")
+   labs(title = "Kenya: Life years lost relative to WHO guideline", 
+       subtitle = "using AQLI 2021 0.01x0.01 res pollution data") 
 
 foo <- region_raster_brick_df_joined_colormap_summary_geom %>%
   ggplot() +
   geom_sf(mapping = aes(fill = lyl_rel_who_2021)) + 
   scale_fill_viridis_b(breaks = c(0, 0.1, 0.5, 1, 2, 3, 4, 5, 6)) +
-  labs(title = "Cameroon: Life years lost relative to WHO guideline", 
+  labs(title = "Kenya: Life years lost relative to WHO guideline", 
        subtitle = "using AQLI 2021 0.01x0.01 res pollution data")
 
 ```
@@ -356,6 +355,7 @@ pol_0.01_region_in_landscan_pop_res <- foster::matchResolution(pol_raw_0.01_regi
 
 # creating a life years lost to WHO layer for India
 pol_values_region <- values(pol_raw_0.01_region)
+
 
 print("stacking all layers in a raster brick")
 
