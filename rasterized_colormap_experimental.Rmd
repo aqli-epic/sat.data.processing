@@ -337,7 +337,7 @@ foo <- region_raster_brick_df_joined_colormap_summary_geom %>%
 ```{r}
 
 # benchmarking
-start_time <- Sys.time()
+threshold_0 <- Sys.time()
 
 # crop colormap to the extent of region
 colormap_region <- colormap 
@@ -350,42 +350,37 @@ pop_raw_landscan_region <- pop_raw_landscan
 
 pop_raw_landscan_crop_pol <- raster::crop(pop_raw_landscan_region, pol_raw_0.01_region)
 
+# benchmarking
+threshold_1 <- Sys.time()
+
 # matching the resolution of the cropped population and pollution datasets
 pol_0.01_region_in_landscan_pop_res <- foster::matchResolution(pol_raw_0.01_region, pop_raw_landscan_crop_pol)
 
-# creating a life years lost to WHO layer for India
-pol_values_region <- values(pol_raw_0.01_region)
+# benchmarking
+threshold_2 <- Sys.time()
 
+# # creating a life years lost to WHO layer for India
+# pol_values_region <- values(pol_raw_0.01_region)
 
 print("stacking all layers in a raster brick")
 
 # creating a raster brick using the population and pollution data for India.
 region_raster_brick <- pop_raw_landscan_crop_pol %>% 
-  addLayer(pol_0.01_region_in_landscan_pop_res) %>%
-  addLayer(pol_0.01_region_in_landscan_pop_res) %>%
-  addLayer(pol_0.01_region_in_landscan_pop_res)
+  addLayer(pol_0.01_region_in_landscan_pop_res) 
 
 # setting the names of the newly created placheoldes
-names(region_raster_brick) <- c("population_2021", "pollution_2021", "lyl_who_standard", "lyl_nat_standard")
+names(region_raster_brick) <- c("population_2021", "pollution_2021")
 
 # generating values for layers containing lyl numbers relative to WHO standard
-region_pollution_numbers <- values(region_raster_brick$pollution_2021)
-region_lyl_numbers_who <- (region_pollution_numbers - who_pm2.5_standard)*aqli_lyl_constant
-region_lyl_numbers_who <- ifelse(region_lyl_numbers_who < 0, 0, region_lyl_numbers_who)
-
-# generating values for layers containing lyl numbes relative to the National standard
-region_lyl_numbers_nat_standard <- (region_pollution_numbers - region_pm2.5_standard) * aqli_lyl_constant
-region_lyl_numbers_nat_standard <- ifelse(region_lyl_numbers_nat_standard < 0, 0, region_lyl_numbers_nat_standard)
-
-
-# updating the lyl layers with the above values
-values(region_raster_brick$lyl_who_standard) <- region_lyl_numbers_who
-values(region_raster_brick$lyl_nat_standard) <- region_lyl_numbers_nat_standard
+# region_pollution_numbers <- values(region_raster_brick$pollution_2021)
 
 # set the same crs for india pollution brick
 crs(region_raster_brick) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 
 print("Population and pollution layers matched")
+
+# benchmarking
+threshold_3 <- Sys.time()
 
 # Now match each population/pollution point to a colormap polygon. To do this, convert
 # polygons to raster of same resolution as population raster, with value of each cell equal
@@ -405,17 +400,24 @@ print("added rasterized colormap layer to the brick")
 
 names(region_raster_brick)[length(names(region_raster_brick))] <- "colormap_objectid"
 
+# benchmarking
+threshold_4 <- Sys.time()
+
 # convert to dataframe
 region_raster_brick_df <- raster::as.data.frame(region_raster_brick)
 
 print("raster brick converted to data frame")
 
-end_time <- Sys.time()
+# benchmarking
+threshold_5 <- Sys.time()
 
 # write region_raster_brick_df to a csv
-region_raster_brick_df %>% data.table::fwrite("./qgis_experimentation/pol_0.01_2021_data.csv")
+region_raster_brick_df %>% data.table::fwrite("./qgis_experimentation/polDataOnly.csv")
 
-#> experimenting with postgres and sparklyr to l
+# benchmarking
+threshold_6 <- Sys.time()
+
+#> experimenting with postgres and sparklyr to 
 
 # postgres
 
@@ -426,18 +428,36 @@ con <- dbConnect(drv = RPostgres::Postgres(),
                  password = "aarshepicindia", 
                  dbname = "postgres")
 
-# sparklyr
+dplyr::copy_to(con, region_raster_brick_df, "polDataOnly")
+
+sc <- sparklyr::spar
+
+region_raster_brick_df 
+
+# read data in from postgres
+polDataOnly_pg <- dplyr::tbl(con, "polDataOnly")
+
+polDataOnly_pg_collect <- polDataOnly_pg %>%
+  group_by(colormap_objectid) %>%
+  dplyr::mutate(pop_weights_gadm2  = population_2021/sum(population_2021, na.rm = TRUE),
+                pm2021_pop_weighted = pollution_2021*pop_weights_gadm2) %>%
+    dplyr::summarise(avg_pm2.5_2021 = sum(pm2021_pop_weighted, na.rm = TRUE)) %>%
+  rename(objectid = colormap_objectid) %>%
+  collect()
+
+# spark
+
 sc <- spark_connect(master = "local")
-sparklyr::spark_read_csv(sc, "pol_0.01_2021_data_with_gadm_columns", "./qgis_experimentation/pol_data_with_gadm_columns.csv")
 
-# join with colormap (sans geometry)
-region_raster_brick_df_joined_colormap <- region_raster_brick_df_test %>%
-  left_join(colormap_region %>% st_drop_geometry(), by = c("colormap_objectid" = "objectid"))
+polDataOnly <- spark_read_csv(sc, "./qgis_experimentation/polDataOnly.csv")
 
-data.table::fwrite(region_raster_brick_df_joined_colormap, "./qgis_experimentation/pol_0.01_2021_data_with_gadm_columns.csv")
-
-
-
+polDataOnly_spark <- polDataOnly %>% 
+group_by(colormap_objectid) %>%
+  dplyr::mutate(pop_weights_gadm2  = population_2021/sum(population_2021, na.rm = TRUE),
+                pm2021_pop_weighted = pollution_2021*pop_weights_gadm2) %>%
+    dplyr::summarise(avg_pm2.5_2021 = sum(pm2021_pop_weighted, na.rm = TRUE)) %>%
+  rename(objectid = colormap_objectid) %>%
+  comp
 
 # group by object id (which is gadm level 2) and create a population weighted average of pollution 
 
@@ -482,6 +502,17 @@ print("geometry column added")
 # end_time <- Sys.time()
 # 
 
+start_time <- Sys.time()
+
+foo %>% 
+  dplyr::group_by(colormap_objectid) %>% 
+  arrow::write_dataset("./experimentation/arrow_r_test/foo_grouped.parquet")
+  dplyr::collect() %>%
+  dplyr::mutate(pop_weights = population_2021/sum(population_2021, na.rm = TRUE), 
+                pm2021_pop_weighted = pop_weights * pollution_2021) %>% 
+  dplyr::summarise(avg_pol = sum(pm2021_pop_weighted, na.rm = TRUE))
+
+end_time <- Sys.time()
 
 ```
 
