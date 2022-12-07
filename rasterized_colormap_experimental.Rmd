@@ -43,7 +43,6 @@ pol_raw_0.01 <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/
 # load latest (2021, as on Novmeber, 2022) Landscan raw global population raster
 pop_raw_landscan <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/population/landscan-global-2021.tif")
 
-
 # load latest colormap shapefile for (last complete updated: November, 2022)
 colormap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap/colormap.shp")
 
@@ -57,6 +56,7 @@ names(pop_raw_landscan) <- "landscan2021"
 
 print("raw data files read in")
 ```
+
 
 
 
@@ -229,7 +229,7 @@ st_write(india_raster_brick_df_joined_colormap_summary_geom, "./qgis_experimenta
 ```{r}
 # crop colormap to the extent of region
 colormap_region <- colormap %>%
-   filter(NAME_0 == "Kenya")
+   filter(NAME_0 == "Cameroon")
 
 # cropping pollution 0.01 data to the extent of the region
 pol_raw_0.01_region <- raster::crop(pol_raw_0.01, colormap_region)
@@ -317,14 +317,14 @@ foo_plt <- region_raster_brick_df_joined_colormap_summary_geom %>%
   geom_sf(mapping = aes(fill = lyl_rel_who_2021)) + 
   scale_fill_viridis_b(option = "rocket", direction = -1) + 
   ggthemes::theme_map() +
-   labs(title = "Kenya: Life years lost relative to WHO guideline", 
-       subtitle = "using AQLI 2021 0.01x0.01 res pollution data") 
+   labs(title = "Cameroon: Life years lost relative to WHO guideline", 
+       subtitle = "using AQLI 2021 0.01x0.01 res pollution data")
 
 foo <- region_raster_brick_df_joined_colormap_summary_geom %>%
   ggplot() +
   geom_sf(mapping = aes(fill = lyl_rel_who_2021)) + 
   scale_fill_viridis_b(breaks = c(0, 0.1, 0.5, 1, 2, 3, 4, 5, 6)) +
-  labs(title = "Kenya: Life years lost relative to WHO guideline", 
+  labs(title = "Cameroon: Life years lost relative to WHO guideline", 
        subtitle = "using AQLI 2021 0.01x0.01 res pollution data")
 
 ```
@@ -332,35 +332,56 @@ foo <- region_raster_brick_df_joined_colormap_summary_geom %>%
 
 
 
-# Using the new workflow, generate gadm level 2 population weighted pollution and life years lost numbers (WHO and National Standard) for a given year's Global data.
+
+
+# Using the new workflow, generate gadm level 2 population weighted pollution and life years lost numbers (WHO and National Standard) for a given year's Global data. Standalone, uses its own data files, not the data files from the second chunk up top.
 
 ```{r}
 
 # benchmarking
-threshold_0 <- Sys.time()
-
-# crop colormap to the extent of region
-colormap_region <- colormap 
+threshold_0 <- Sys.time() #r1: 0 seconds, r2: 0 seconds
 
 # pollution raw data
-pol_raw_0.01_region <- pol_raw_0.01
-
+pollution_dataset <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/pollution/0.01x0.01/foo_2020.nc")
+  
 # population raw data
-pop_raw_landscan_region <- pop_raw_landscan
+population_dataset <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/population/landscan-global-2021.tif")
 
-pop_raw_landscan_crop_pol <- raster::crop(pop_raw_landscan_region, pol_raw_0.01_region)
+# load latest colormap shapefile for (last complete updated: November, 2022)
+colormap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap/colormap.shp")
+
+# naming the raw global pollution data and setting its crs
+crs(pollution_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+names(pollution_dataset) <- "pm2.5_pollution"
+
+# naming the raw global landscan population data and setting its crs to be the same as the pollution data
+crs(population_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+names(population_dataset) <- "population"
 
 # benchmarking
-threshold_1 <- Sys.time()
+threshold_1 <- Sys.time() # r1 (t0 to t1:18 seconds), r2 (t0 to t1: 7.04 seconds)
+
+#--- no longer need to crop, as this can be reused, so I wrote it as a tif, and then will simply read it
+#- crop population dataset to the pollution dataset
+# pop_raw_landscan_crop_pol <- raster::crop(population_dataset, pollution_dataset)
+
+#- write the cropped population dataset
+# pop_raw_landscan_crop_pol %>%
+#   raster::writeRaster(filename = "./experimentation/pop_raw_landscan_crop_pol.tif", 
+#                       format = "GTiff", overwrite = TRUE)
+#---
+
+# reading in the pre-cropped population raster, which remains the same for all pollution datasets
+pop_raw_landscan_crop_pol <- raster::raster("./experimentation/pop_raw_landscan_crop_pol.tif")
+
+# benchmarking
+threshold_2 <- Sys.time() # r1 (t1 to t2: 1.56 minutes), r2 (t1 to t2: 0.07 seconds)
 
 # matching the resolution of the cropped population and pollution datasets
-pol_0.01_region_in_landscan_pop_res <- foster::matchResolution(pol_raw_0.01_region, pop_raw_landscan_crop_pol)
+pol_0.01_region_in_landscan_pop_res <- foster::matchResolution(pollution_dataset, pop_raw_landscan_crop_pol)
 
 # benchmarking
-threshold_2 <- Sys.time()
-
-# # creating a life years lost to WHO layer for India
-# pol_values_region <- values(pol_raw_0.01_region)
+threshold_3 <- Sys.time() # r1 (t2 to t3: 12.65 minutes), r2 (t2 to t3: 6.15 minutes)
 
 print("stacking all layers in a raster brick")
 
@@ -368,11 +389,8 @@ print("stacking all layers in a raster brick")
 region_raster_brick <- pop_raw_landscan_crop_pol %>% 
   addLayer(pol_0.01_region_in_landscan_pop_res) 
 
-# setting the names of the newly created placheoldes
-names(region_raster_brick) <- c("population_2021", "pollution_2021")
-
-# generating values for layers containing lyl numbers relative to WHO standard
-# region_pollution_numbers <- values(region_raster_brick$pollution_2021)
+# setting the names of the newly created placheolders
+names(region_raster_brick) <- c("population", "pm2.5_pollution")
 
 # set the same crs for india pollution brick
 crs(region_raster_brick) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
@@ -380,19 +398,25 @@ crs(region_raster_brick) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +t
 print("Population and pollution layers matched")
 
 # benchmarking
-threshold_3 <- Sys.time()
+threshold_4 <- Sys.time() # r1 (t3 to t4: 0.63 seconds), r2 (t3 to t4: 0.27 seconds)
 
 # Now match each population/pollution point to a colormap polygon. To do this, convert
 # polygons to raster of same resolution as population raster, with value of each cell equal
 # to objectid of polygon that covers its center.
 # Fasterize is an ultra-fast version of the rasterize function.
-print("Beginning to rasterize colormap shapefile")
-polygon_cells <- fasterize(colormap_region, pol_0.01_region_in_landscan_pop_res, field = "objectid", fun = "last")
-# writeRaster(polygon_cells,
-# 	filename = "./qgis_experimentation/colormap_region_rasterized.tif",
-# 	format = "GTiff", overwrite = TRUE)
 
-print("rasterized colormap")
+print("Beginning to rasterize colormap shapefile")
+
+#-- this remains same for all pollution datasets, hence writing it, and will then simply read it
+# polygon_cells <- fasterize(colormap, pol_0.01_region_in_landscan_pop_res, field = "objectid", fun = "last")
+# writeRaster(polygon_cells,
+# 	filename = "./experimentation/colormap_rasterized.tif",
+# 	format = "GTiff", overwrite = TRUE)
+#---
+
+polygon_cells <- raster::raster("./experimentation/colormap_rasterized.tif")
+
+print("colormap rasterized")
 
 region_raster_brick <- region_raster_brick %>% addLayer(polygon_cells)
 
@@ -401,7 +425,7 @@ print("added rasterized colormap layer to the brick")
 names(region_raster_brick)[length(names(region_raster_brick))] <- "colormap_objectid"
 
 # benchmarking
-threshold_4 <- Sys.time()
+threshold_5 <- Sys.time() # r1 (t4 to t5: 15.47 seconds), r2 (t4 to t5: 0.36 seconds)
 
 # convert to dataframe
 region_raster_brick_df <- raster::as.data.frame(region_raster_brick)
@@ -409,28 +433,72 @@ region_raster_brick_df <- raster::as.data.frame(region_raster_brick)
 print("raster brick converted to data frame")
 
 # benchmarking
-threshold_5 <- Sys.time()
+threshold_6 <- Sys.time() # r1 (t5 to t6: 5.09 minutes), r2 (t5 to t6: 4.96 minutes)
 
-# write region_raster_brick_df to a csv
-region_raster_brick_df %>% arrow::write_dataset("./experimentation/arrow_r_test/polDataOnly_2.csv", format = "csv")
+#-- (Update: no longer needed as we directly coerce region_raster_brick_df to an arrow table). Will only need to write this when implementing high res layer.
+#- write region_raster_brick_df to a csv
+#--
 
-# benchmarking
-threshold_6 <- Sys.time()
-
-region_raster_brick_df_light <- arrow::open_dataset("./experimentation/arrow_r_test/polDataOnly_2.csv", format = "csv")
+pollution_data_0.01_light <- arrow::as_arrow_table(region_raster_brick_df)
 
 # benchmarking
-threshold_7 <- Sys.time()
+threshold_7 <- Sys.time() # r1 (t6 to t7: 4.89 minutes), r2 (t6 to t7: 21.03 seconds)
 
-foo %>% 
-  dplyr::group_by(colormap_objectid) %>% 
-  arrow::write_dataset("./experimentation/arrow_r_test/foo_grouped.parquet")
-  dplyr::collect() %>%
-  dplyr::mutate(pop_weights = population_2021/sum(population_2021, na.rm = TRUE), 
-                pm2021_pop_weighted = pop_weights * pollution_2021) %>% 
-  dplyr::summarise(avg_pol = sum(pm2021_pop_weighted, na.rm = TRUE))
+print("rasterized dataframe coerced to an arrow table")
 
-end_time <- Sys.time()
+#-- read raster data using arrow (no longer needed as we already coerced region_raster_brick_df to an arrow table)
+# pollution_data_0.01_light <- arrow::open_dataset("./experimentation/pollution_data_0.01_2021.csv", format = "csv")
+#-- 
+
+# benchmarking
+threshold_8 <- Sys.time() # r1 (t7 to t8: 35.41 seconds), r2 (t7 to t8: 0.09 seconds)
+
+# generating district level results
+pollution_district_wise <- pollution_data_0.01_light %>%
+  group_by(colormap_objectid) %>%
+  collect() %>%
+  mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         pollution_pop_weighted = pop_weights*pm2.5_pollution) %>%
+  summarise(total_population = sum(population, na.rm = TRUE), 
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE), 
+            lyl_rel_who = round((avg_pm2.5_pollution - who_pm2.5_standard)*aqli_lyl_constant, 2), 
+            lyl_rel_who = ifelse(lyl_rel_who < 0, 0, lyl_rel_who)) %>%
+  rename(objectid = colormap_objectid)
+
+# benchmarking
+threshold_9 <- Sys.time() # r1 (t8 to t9: 6.89 minutes), r2 (t8 to t9: 4.53 minutes)
+
+# joining the pollution district wise data to colormap, to get district, state, country names and the geometry column
+
+pollution_district_wise_matched_colormap <- pollution_district_wise %>%
+  rename(objectid = colormap_objectid) %>%
+  left_join(colormap, by = c("objectid")) %>%
+  select(objectid, iso_alpha3, NAME_0, NAME_1, NAME_2, total_population, avg_pm2.5_pollution, lyl_rel_who, geometry) %>%
+  rename(objectid_color = objectid)
+  
+# sanity checks
+sum(is.na(pollution_district_wise_matched_colormap$iso_alpha3)) #1
+sum(is.na(pollution_district_wise_matched_colormap$objectid_color)) #1, objectid: 48060
+sum(is.na(pollution_district_wise_matched_colormap$NAME_0))
+sum(is.na(pollution_district_wise_matched_colormap$NAME_1))
+sum(is.na(pollution_district_wise_matched_colormap$NAME_2))
+sum(is.na(pollution_district_wise_matched_colormap$total_population))
+sum(is.na(pollution_district_wise_matched_colormap$avg_pm2.5_pollution))
+sum(is.na(pollution_district_wise_matched_colormap$lyl_rel_who))
+sum(is.na(pollution_district_wise_matched_colormap$geometry))
+
+# collapse (i.e. summarise) to hover level
+
+
+
+
+
+
+
+```
+
+
+```{r}
 
 ```
 
