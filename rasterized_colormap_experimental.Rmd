@@ -43,7 +43,6 @@ pol_raw_0.01 <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/
 # load latest (2021, as on Novmeber, 2022) Landscan raw global population raster
 pop_raw_landscan <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/population/landscan-global-2021.tif")
 
-
 # load latest colormap shapefile for (last complete updated: November, 2022)
 colormap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap/colormap.shp")
 
@@ -482,6 +481,32 @@ print("geometry column added")
 # end_time <- Sys.time()
 # 
 
+
+```
+
+# Christa, Random graph: China and Beijing LYL map at 0.01 resolution
+
+```{r}
+# crop colormap to the extent of Los Angeles
+colormap_china <- colormap %>%
+   filter(NAME_0 %in% "China") 
+
+# cropping pollution 0.01 data to the extent of LA
+pol_raw_0.01_china <- raster::crop(pol_raw_0.01, colormap_china)
+
+# creating a life years lost layer
+pol_raw_0.01_china_values <- values(pol_raw_0.01_china)
+lyl_pol_raw_0.01_china <- (pol_raw_0.01_china_values - 5)*0.098
+lyl_pol_raw_0.01_china_values <- ifelse(lyl_pol_raw_0.01_china < 0, 0, lyl_pol_raw_0.01_china)
+
+pol_lyl_raw_0.01_china_brick <- pol_raw_0.01_china %>%
+  addLayer(pol_raw_0.01_china)
+
+names(pol_lyl_raw_0.01_china_brick) <- c("pm2021", "lyl_2021_rel_who")
+
+values(pol_lyl_raw_0.01_china_brick$lyl_2021_rel_who) <- lyl_pol_raw_0.01_china_values
+
+writeRaster(pol_lyl_raw_0.01_china_brick, "./experimentation/qgis/china_raster_0.01_lyl_2021.tif")
 
 ```
 
