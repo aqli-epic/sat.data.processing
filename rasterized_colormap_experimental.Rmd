@@ -506,7 +506,7 @@ names(pol_lyl_raw_0.01_china_brick) <- c("pm2021", "lyl_2021_rel_who")
 
 values(pol_lyl_raw_0.01_china_brick$lyl_2021_rel_who) <- lyl_pol_raw_0.01_china_values
 
-writeRaster(pol_lyl_raw_0.01_china_brick, "./experimentation/qgis/china_raster_0.01_lyl_2021.tif")
+writeRaster(pol_lyl_raw_0.01_china_brick$lyl_2021_rel_who, "./experimentation/qgis/china_raster_0.01_lyl_2021.tif")
 
 ```
 
