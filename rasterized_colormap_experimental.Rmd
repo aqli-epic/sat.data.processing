@@ -350,7 +350,15 @@ population_dataset <- raster::raster("./ar.2023.update.using.2021.pol.data/data/
 # load latest colormap shapefile for (last complete updated: November, 2022)
 colormap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap/colormap.shp")
 
-# naming the raw global pollution data and setting its crs
+# load the latest hover shapefile (last complete update: November, 2022)
+hovermap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/hover/hover.shp") %>%
+  rename(objectid_hover = objectid)
+
+
+# read color hover crosswalk
+gadm_hover_color_crosswalk <- readxl::read_excel("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/crosswalks/gadm_hover_color/gadm_hover_color_crosswalk.xlsx")
+
+  # naming the raw global pollution data and setting its crs
 crs(pollution_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 names(pollution_dataset) <- "pm2.5_pollution"
 
@@ -471,12 +479,12 @@ threshold_9 <- Sys.time() # r1 (t8 to t9: 6.89 minutes), r2 (t8 to t9: 4.53 minu
 # joining the pollution district wise data to colormap, to get district, state, country names and the geometry column
 
 pollution_district_wise_matched_colormap <- pollution_district_wise %>%
-  rename(objectid = colormap_objectid) %>%
   left_join(colormap, by = c("objectid")) %>%
   select(objectid, iso_alpha3, NAME_0, NAME_1, NAME_2, total_population, avg_pm2.5_pollution, lyl_rel_who, geometry) %>%
-  rename(objectid_color = objectid)
+rename(objectid_color = objectid) %>%
+  st_as_sf()
   
-# sanity checks
+#> sanity checks
 sum(is.na(pollution_district_wise_matched_colormap$iso_alpha3)) #1
 sum(is.na(pollution_district_wise_matched_colormap$objectid_color)) #1, objectid: 48060
 sum(is.na(pollution_district_wise_matched_colormap$NAME_0))
@@ -487,9 +495,50 @@ sum(is.na(pollution_district_wise_matched_colormap$avg_pm2.5_pollution))
 sum(is.na(pollution_district_wise_matched_colormap$lyl_rel_who))
 sum(is.na(pollution_district_wise_matched_colormap$geometry))
 
-# collapse (i.e. summarise) to hover level
+# gadm colormap object ids that are present in the colormap file, but not in the collapsed gadm level 2 file that we
+# got from collapsing pollution_data_0.01_light. Need to match these separately.
+colormap$objectid[!(colormap$objectid %in% pollution_district_wise_matched_colormap$objectid_color)] # 152 in total
+  
+# pollution district wise, collapse to hover level
+pollution_district_wise_join_ch_crosswalk <- pollution_district_wise_matched_colormap %>%
+  left_join(gadm_hover_color_crosswalk, by = c("objectid_color")) %>%
+  select(objectid_color, objectid_hover, iso_alpha3, NAME_0, NAME_1, NAME_2, everything())
+
+# sanity check (number of hover ids not present in the collapsed district level file. # 40. To be taken care of 
+# separately
+length(unique(gadm_hover_color_crosswalk$objectid_hover)) - length(unique(pollution_district_wise_join_ch_crosswalk$objectid_hover))
+
+# A geometry stripped off version of "pollution_district_wise_join_ch_crosswalk"
+pollution_district_wise_join_ch_crosswalk_non_geom <- pollution_district_wise_join_ch_crosswalk %>%
+  st_drop_geometry()
+
+# collapse (i.e. summarise) to hover level from the district level
+pollution_hover_level_non_geom <- pollution_district_wise_join_ch_crosswalk_non_geom %>%
+  group_by(objectid_hover) %>%
+   mutate(pop_weights = total_population/sum(total_population, na.rm = TRUE), 
+         pollution_pop_weighted = pop_weights*avg_pm2.5_pollution) %>%
+  summarise(total_population = sum(total_population, na.rm = TRUE), 
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE), 
+            lyl_rel_who = round((avg_pm2.5_pollution - who_pm2.5_standard)*aqli_lyl_constant, 2), 
+            lyl_rel_who = ifelse(lyl_rel_who < 0, 0, lyl_rel_who)) 
+
+# adding in the geometry column to the summarized "pollution_hover_file", using the "hovermap" shapefile, outputted by "1_shapefile_aggregate.R"
+
+pollution_hover_level_with_geom <- pollution_hover_level_non_geom %>%
+  left_join(hovermap, by = c("objectid_hover")) %>%
+  st_as_sf()
 
 
+pollution_district_wise_matched_colormap
+
+#> sanity checks in QGIS (optional)
+
+# collapsed color file
+pollution_district_wise_matched_colormap %>% st_write("./experimentation/qgis/pollution_district_wise_matched_colormap_Dec102022.shp")  
+
+# collapsed hover file
+pollution_hover_level %>%
+  st_write("./experimentation/qgis/pollution_hover_level_Dec102022.shp")
 
 
 
