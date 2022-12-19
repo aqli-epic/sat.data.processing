@@ -329,11 +329,6 @@ foo <- region_raster_brick_df_joined_colormap_summary_geom %>%
 
 ```
 
-
-
-
-
-
 # Using the new workflow, generate gadm level 2 population weighted pollution and life years lost numbers (WHO and National Standard) for a given year's Global data. Standalone, uses its own data files, not the data files from the second chunk up top.
 
 ```{r}
@@ -341,11 +336,12 @@ foo <- region_raster_brick_df_joined_colormap_summary_geom %>%
 # benchmarking
 threshold_0 <- Sys.time() #r1: 0 seconds, r2: 0 seconds
 
-# pollution raw data
-pollution_dataset <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/pollution/0.01x0.01/foo_2020.nc")
-  
 # population raw data
 population_dataset <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/population/landscan-global-2021.tif")
+
+# naming the raw global landscan population data and setting its crs to be the same as the pollution data
+crs(population_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+names(population_dataset) <- "population"
 
 # load latest colormap shapefile for (last complete updated: November, 2022)
 colormap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/colormap/colormap.shp")
@@ -354,17 +350,15 @@ colormap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_po
 hovermap <- st_read("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/hover/hover.shp") %>%
   rename(objectid_hover = objectid)
 
-
 # read color hover crosswalk
 gadm_hover_color_crosswalk <- readxl::read_excel("./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/crosswalks/gadm_hover_color/gadm_hover_color_crosswalk.xlsx")
 
-  # naming the raw global pollution data and setting its crs
+# pollution raw data
+pollution_dataset <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/pollution/0.01x0.01/foo_2020.nc")
+
+# naming the raw global pollution data and setting its crs
 crs(pollution_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 names(pollution_dataset) <- "pm2.5_pollution"
-
-# naming the raw global landscan population data and setting its crs to be the same as the pollution data
-crs(population_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-names(population_dataset) <- "population"
 
 # benchmarking
 threshold_1 <- Sys.time() # r1 (t0 to t1:18 seconds), r2 (t0 to t1: 7.04 seconds)
@@ -527,9 +521,6 @@ pollution_hover_level_non_geom <- pollution_district_wise_join_ch_crosswalk_non_
 pollution_hover_level_with_geom <- pollution_hover_level_non_geom %>%
   left_join(hovermap, by = c("objectid_hover")) %>%
   st_as_sf()
-
-
-pollution_district_wise_matched_colormap
 
 #> sanity checks in QGIS (optional)
 
