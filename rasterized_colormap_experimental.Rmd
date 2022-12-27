@@ -370,8 +370,9 @@ ssd_location <- "D:/aqli"
 #-------------------------------------------------
 
 
+
 # benchmarking
-threshold_0 <- Sys.time() #r1: 0 seconds, r2: 0 seconds
+threshold_0 <- Sys.time() 
 
 # population raw data
 population_dataset <- raster::raster(str_c(pop_data_location, pop_data_file_name, sep = ""))
@@ -418,7 +419,7 @@ polygon_cells <- raster::raster("./experimentation/colormap_rasterized.tif")
 
 
 # benchmarking
-threshold_1 <- Sys.time() # r1 (t0 to t1:18 seconds), r2 (t0 to t1: 7.04 seconds)
+threshold_1 <- Sys.time() 
 
 
 #> reading pollution data, one year at a time and then will concatenate all results-----------------------
@@ -449,30 +450,30 @@ names(pollution_dataset) <- "pm2.5_pollution"
 
 
 # benchmarking
-threshold_2 <- Sys.time() # r1 (t1 to t2: 1.56 minutes), r2 (t1 to t2: 0.07 seconds)
+threshold_2 <- Sys.time() 
 
 # matching the resolution of the cropped population and pollution datasets
 pol_0.01_region_in_landscan_pop_res <- foster::matchResolution(pollution_dataset, pop_raw_landscan_crop_pol)
 
 # benchmarking
-threshold_3 <- Sys.time() # r1 (t2 to t3: 12.65 minutes), r2 (t2 to t3: 6.15 minutes)
+threshold_3 <- Sys.time() 
 
 print("stacking all layers in a raster brick")
 
-# creating a raster brick using the population and pollution data for India.
+# creating a raster brick using the population and pollution data
 region_raster_brick <- pop_raw_landscan_crop_pol %>% 
   addLayer(pol_0.01_region_in_landscan_pop_res) 
 
 # setting the names of the newly created placheolders
 names(region_raster_brick) <- c("population", "pm2.5_pollution")
 
-# set the same crs for india pollution brick
+# set the same crs for pollution brick
 crs(region_raster_brick) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 
 print("Population and pollution layers matched")
 
 # benchmarking
-threshold_4 <- Sys.time() # r1 (t3 to t4: 0.63 seconds), r2 (t3 to t4: 0.27 seconds)
+threshold_4 <- Sys.time() 
 
 # Now match each population/pollution point to a colormap polygon. To do this, convert
 # polygons to raster of same resolution as population raster, with value of each cell equal
@@ -487,7 +488,7 @@ print("added rasterized colormap layer to the brick")
 names(region_raster_brick)[length(names(region_raster_brick))] <- "colormap_objectid"
 
 # benchmarking
-threshold_5 <- Sys.time() # r1 (t4 to t5: 15.47 seconds), r2 (t4 to t5: 0.36 seconds)
+threshold_5 <- Sys.time() 
 
 # convert to dataframe
 region_raster_brick_df <- raster::as.data.frame(region_raster_brick)
@@ -498,7 +499,7 @@ print("raster brick converted to data frame")
 region_raster_brick_df %>% arrow::write_dataset(str_c(ssd_location, cur_pol_file_year))
 
 # benchmarking
-threshold_6 <- Sys.time() # r1 (t5 to t6: 5.09 minutes), r2 (t5 to t6: 4.96 minutes)
+threshold_6 <- Sys.time() 
 
 #-- (Update: no longer needed as we directly coerce region_raster_brick_df to an arrow table). Will only need to write this when implementing high res layer.
 #- write region_raster_brick_df to a csv
@@ -507,7 +508,7 @@ threshold_6 <- Sys.time() # r1 (t5 to t6: 5.09 minutes), r2 (t5 to t6: 4.96 minu
 pollution_data_0.01_light <- arrow::as_arrow_table(region_raster_brick_df)
 
 # benchmarking
-threshold_7 <- Sys.time() # r1 (t6 to t7: 4.89 minutes), r2 (t6 to t7: 21.03 seconds)
+threshold_7 <- Sys.time() 
 
 print("rasterized dataframe coerced to an arrow table")
 
@@ -516,9 +517,9 @@ print("rasterized dataframe coerced to an arrow table")
 #-- 
 
 # benchmarking
-threshold_8 <- Sys.time() # r1 (t7 to t8: 35.41 seconds), r2 (t7 to t8: 0.09 seconds)
+threshold_8 <- Sys.time() 
 
-# generating district level results
+# generating a district level dataset
 pollution_district_wise <- pollution_data_0.01_light %>%
   group_by(colormap_objectid) %>%
   collect() %>%
@@ -607,10 +608,5 @@ print(str_c("Iteration #", i, " ends"))
 end_time <- Sys.time()
 time_diff <- end_time - start_time
 print(str_c("Time difference: ", time_diff, " minutes"))
-  
-
-
-
-
 
 ```
