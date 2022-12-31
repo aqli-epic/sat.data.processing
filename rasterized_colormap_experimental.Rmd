@@ -67,8 +67,14 @@ hovermap_location <- "hover/hover.shp"
 # raster resolution of the final data brick (containing a rasterized pollution, population and a rasterized shape file)
 raster_res <- 0.008
 
-# update year (note)
+# data timeline (note)
+pol_data_start_year <- 1998
 update_year <- 2021
+
+# data levels
+gadm0_folder_name <- "gadm_0"
+gadm1_folder_name <- "gadm_1"
+gadm2_folder_name <- "gadm_2"
 
 # corresponnding aqli report publishing year (this is the year in which "update_year"'s data will be published. Current lag is 2 years).
 report_publishing_year <- 2023
@@ -79,12 +85,19 @@ report_publishing_year <- 2023
 ssd_drive <- "D:/"
 
 # data folder name (on ssd)
-aqli_data_share_folder_name <- "aqli_2023Report_data_share"
+aqli_data_share_folder_name <- "aqli.2023.report.data.share"
 
-ssd_location_rasterized_data <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, "publishYearWith", update_year, "data", "/rasterized/", raster_res, "/", sep = "")
+# high res data location
+ssd_location_rasterized_data_0.008 <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.year.with", update_year, "data", "/rasterized/", raster_res, "/", sep = "")
 
-ssd_location_collapsed_data <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, "publishYearWith", update_year, "data", "/collapsed/", sep  = "")
+#> collapsed data path: gadm0 level
+ssd_location_collapsed_gadm0_data_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", gadm0_folder_name, "/", sep  = "")
 
+#> collapsed data path: gadm1 level
+ssd_location_collapsed_gadm1_data_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", gadm1_folder_name, "/", sep  = "")
+
+#> collapsed data path: gadm2 level
+ssd_location_collapsed_gadm2_data_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", gadm2_folder_name, "/", sep  = "")
 
 
 #-------------------------------------------------
@@ -134,13 +147,18 @@ threshold_1 <- Sys.time()
 
 
 #> reading pollution data, one year at a time and then will concatenate all results-----------------------
+# Note that the datasets in this pipeline do not include the  geometry column. That can be added in the end after concatenating all yearly datasets into a single final gadm2 dataset. For the gadm0 and gadm1 datasets (which will be derived from the single "final gadm2 dataset"), a similar process will follow.
 
 # pollution datasets list
 pol_data_list <- list.files(pol_data_location)
 
+#> for loop begins----------------------------------------------------------------
+
 for (i in 1:length(pol_data_list)){
   
   print(stringr::str_c("Iteration #", i, " begins"))
+  
+  pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
   
   # for testing purposes
   if(i == 3){
@@ -208,8 +226,8 @@ aqli_raster_brick_df <- raster::as.data.frame(region_raster_brick)
 
 print("raster brick converted to data frame")
 
-# write rasterized dataframe to ssd, in arrow data format
-aqli_raster_brick_df %>% arrow::write_dataset(str_c(ssd_location_rasterized_data, cur_pol_file_year, ".parquet"))
+# write rasterized dataframe to ssd, in arrow data format (0.008x0.008 resolution)
+aqli_raster_brick_df %>% arrow::write_dataset(str_c(ssd_location_rasterized_data_0.008, cur_pol_file_year, ".parquet"))
 
 # benchmarking
 threshold_6 <- Sys.time() 
@@ -241,11 +259,12 @@ aqli_gadm2_collapse <- aqli_raster_brick_light %>%
             avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE), 
             lyl_rel_who = round((avg_pm2.5_pollution - who_pm2.5_standard)*aqli_lyl_constant, 2), 
             lyl_rel_who = ifelse(lyl_rel_who < 0, 0, lyl_rel_who)) %>%
-  dplyr::rename(objectid_gadm2 = colormap_objectid)
+  dplyr::rename(objectid_gadm2 = colormap_objectid, 
+                pol_col_name_vec[i] = avg_pm2.5_pollution)
 
 # writing the gadm2 level dataset to ssd
 aqli_gadm2_collapse %>%
-  readr::write_csv(str_c(ssd_location_collapsed_data, cur_pol_file_year, ".csv"))
+  readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, cur_pol_file_year, "_", gadm2_folder_name, ".csv"))
 
 # benchmarking
 threshold_8 <- Sys.time() # r1 (t8 to t9: 6.89 minutes), r2 (t8 to t9: 4.53 minutes)
@@ -260,11 +279,59 @@ end_time <- Sys.time()
 time_diff <- end_time - start_time
 print(str_c("Time difference: ", time_diff, " minutes"))
 
-#> sanity checks
+#> for loop ends-----------------------------------------------------------------------
 
+#> Output in VIT data sharing format
+
+# read in all pollution data and name_0, name_1, name_2 columns from colormap (joined in the first iteration of the loop below) into a single dataset, with just pollution columns. I am in the process of updating national standards, so for now we have a placeholder national standards column, which is just set to 10 micrograms per cubic meter for all regions.
+
+collapsed_gadm2_files_vec <- list.files(str_c(ssd_location_collapsed_gadm2_data_path)) %>% 
+  sort()
+
+for(i in 1:length(collapsed_gadm2_files_list)){
+  if(i == 1){
+    temp_gadm2 <- readr::read_csv(str_c(ssd_location_collapsed_gadm2_data_path, collapsed_gadm2_files_vec[i]))
+    
+    aqli_gadm2_collapse_master <- temp_gadm2 %>%
+      dplyr::left_join(colormap, by = c("objectid_gadm2" = "objectid")) %>%
+      mutate(whostandard = 5, 
+             natstandard = 10) %>%
+      dplyr::select(objectid_gadm2, iso_alpha3, NAME_0, NAME_1, NAME_2, total_population,
+             whostandard, natstandard,
+             avg_pm2.5_pollution) %>%
+      dplyr::rename(country = NAME_0,
+             name_1 = NAME_1, 
+             name_2 = NAME_2,
+             population = total_population)
+    
+    colnames(aqli_gadm2_collapse_master)[ncol(aqli_gadm2_collapse_master)] <- pol_col_name_vec[i]
+    
+  } else{
+     temp_gadm2 <- readr::read_csv(str_c(ssd_location_collapsed_gadm2_data_path, collapsed_gadm2_files_vec[i]))
+    
+    aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>% 
+      dplyr::left_join(temp_gadm2, by  = "objectid_gadm2") %>%
+      dplyr::select(-c(total_population, lyl_rel_who)) %>%
+      dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population,
+             whostandard, natstandard, pol_col_name_vec[1:(i-1)],
+             avg_pm2.5_pollution)
+    
+    colnames(aqli_gadm2_collapse_master)[ncol(aqli_gadm2_collapse_master)] <- pol_col_name_vec[i]
+  
+  }
+}
+
+
+# gadm2: compiling all gadm2 yearly datasets into a final gadm2 format to be shared with VIT
+
+
+
+
+
+#> sanity checks time-------------------------------------------------------------
 
 # 1: number of NA's in pollution for each colormap object id
-foo <- arrow::open_dataset("D:/aqli_2023Report_data_share/2023publishYearWith2021data/rasterized/0.008/1999.parquet/part-0.parquet")
+foo <- arrow::open_dataset("D:/aqli.202.report.data.share/2023.publish.year.with.2021.data/rasterized/0.008/1999.parquet/part-0.parquet")
 
 aqli_gadm2_collapse_na_summary <- foo %>%
   dplyr::group_by(colormap_objectid) %>%
@@ -288,5 +355,8 @@ aqli_gadm2_collapse_na_summary_pop <- foo %>%
     total_nas_pop = sum(is.na(population)), 
     prop_na = round((total_nas_pop/count_rows)*100, 2)) 
 
+#-------------------------------------------------------------------------------
+
+#> Read in 
 
 ```
