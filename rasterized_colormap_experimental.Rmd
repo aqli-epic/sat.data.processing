@@ -6,8 +6,8 @@ output: html_document
 ---
 
 # setup
-```{r}
-
+```{r setup}
+knitr::opts_chunk$set(echo = FALSE)
 # start time
 start_time <- Sys.time()
 
@@ -40,9 +40,11 @@ print("Libraries and Global variables loaded in.")
 
 ```
 
-# Using the new workflow, generate gadm level 2 population weighted pollution and life years lost numbers (WHO and National Standard) for a given year's Global data. Standalone, uses its own data files, not the data files from the second chunk up top.
+#> Using the new workflow, generate gadm level 2 population weighted pollution and life years lost numbers (WHO and National Standard) for a given year's Global data. Standalone, uses its own data files, not the data files from the second chunk up top.
 
-```{r}
+# set paths
+
+```{r set_paths, echo=FALSE}
 
 #> paths and global variables (create the necessary folder structure after reading through the paths section. All paths are relative to your current working directory, but you might need to make a few folders, for e.g. for specific resolution datasets). After that, run this script and everything should run smoothly.----------------------------------------
 
@@ -102,7 +104,11 @@ ssd_location_collapsed_gadm2_data_path <- stringr::str_c(ssd_drive, aqli_data_sh
 
 #-------------------------------------------------
 
+```
 
+# main pipeline to get yearly gadm2 and high res pollution datasets
+
+```{r get_yearly_pol_datasets, echo=FALSE}
 
 # benchmarking
 threshold_0 <- Sys.time() 
@@ -149,8 +155,8 @@ threshold_1 <- Sys.time()
 #> reading pollution data, one year at a time and then will concatenate all results-----------------------
 # Note that the datasets in this pipeline do not include the  geometry column. That can be added in the end after concatenating all yearly datasets into a single final gadm2 dataset. For the gadm0 and gadm1 datasets (which will be derived from the single "final gadm2 dataset"), a similar process will follow.
 
-# pollution datasets list
-pol_data_list <- list.files(pol_data_location)
+# pollution column names empty vector
+pol_col_names_vec <- c()
 
 #> for loop begins----------------------------------------------------------------
 
@@ -281,6 +287,13 @@ print(str_c("Time difference: ", time_diff, " minutes"))
 
 #> for loop ends-----------------------------------------------------------------------
 
+
+```
+
+# combine all pollution yearly datasets into a single gadm2 dataset, in the format that has to be shared with VIT. See AQLI data dictionary for more information.
+
+```{r combine_yearly_pol_data, echo=FALSE}
+
 #> Output in VIT data sharing format
 
 # read in all pollution data and name_0, name_1, name_2 columns from colormap (joined in the first iteration of the loop below) into a single dataset, with just pollution columns. I am in the process of updating national standards, so for now we have a placeholder national standards column, which is just set to 10 micrograms per cubic meter for all regions.
@@ -288,7 +301,7 @@ print(str_c("Time difference: ", time_diff, " minutes"))
 collapsed_gadm2_files_vec <- list.files(str_c(ssd_location_collapsed_gadm2_data_path)) %>% 
   sort()
 
-for(i in 1:length(collapsed_gadm2_files_list)){
+for(i in 1:length(collapsed_gadm2_files_vec)){
   if(i == 1){
     temp_gadm2 <- readr::read_csv(str_c(ssd_location_collapsed_gadm2_data_path, collapsed_gadm2_files_vec[i]))
     
@@ -298,7 +311,7 @@ for(i in 1:length(collapsed_gadm2_files_list)){
              natstandard = 10) %>%
       dplyr::select(objectid_gadm2, iso_alpha3, NAME_0, NAME_1, NAME_2, total_population,
              whostandard, natstandard,
-             avg_pm2.5_pollution) %>%
+             pol_col_name_vec[i]) %>%
       dplyr::rename(country = NAME_0,
              name_1 = NAME_1, 
              name_2 = NAME_2,
@@ -312,9 +325,8 @@ for(i in 1:length(collapsed_gadm2_files_list)){
     aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>% 
       dplyr::left_join(temp_gadm2, by  = "objectid_gadm2") %>%
       dplyr::select(-c(total_population, lyl_rel_who)) %>%
-      dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population,
-             whostandard, natstandard, pol_col_name_vec[1:(i-1)],
-             avg_pm2.5_pollution)
+      dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard, pol_col_name_vec[1:(i-1)],
+             pol_col_name_vec[i])
     
     colnames(aqli_gadm2_collapse_master)[ncol(aqli_gadm2_collapse_master)] <- pol_col_name_vec[i]
   
@@ -322,12 +334,48 @@ for(i in 1:length(collapsed_gadm2_files_list)){
 }
 
 
-# gadm2: compiling all gadm2 yearly datasets into a final gadm2 format to be shared with VIT
+# adding in the life years lost columns
+
+aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who_{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat_{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard, everything()) 
+
+# removing the substring "pm" from life expectancy column names
+colnames(aqli_gadm2_collapse_master)[str_detect(colnames(aqli_gadm2_collapse_master), "llpp")] <- stringr::str_remove(colnames(aqli_gadm2_collapse_master)[stringr::str_detect(colnames(aqli_gadm2_collapse_master), "llpp")], "pm")
 
 
+# round all pm and lyl columns to two decimal places
+aqli_gadm2_collapse_master[, stringr::str_detect(colnames(aqli_gadm2_collapse_master), "llpp|pm")] <- aqli_gadm2_collapse_master %>%
+  dplyr::select(-c(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard)) %>%
+  purrr::map_df(round, 2) 
+
+# write the above (non-geometry version) of gadm2 master file to the collapsed/gadm2 folder
+
+aqli_gadm2_collapse_master %>%
+  write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom.csv"))
+
+# add in the geometry column by left joining the above with a color file and then write that to the collapsed/gadm2 folder
+
+aqli_gadm2_collapse_master_with_geom <- aqli_gadm2_collapse_master %>%
+  left_join(colormap %>% rename(objectid_gadm2 = objectid), by = "objectid_gadm2") %>%
+  rename(iso_alpha3 = iso_alpha3.x) %>%
+  select(-c(iso_alpha3.y, NAME_0, NAME_1, NAME_2)) %>%
+  st_as_sf()
+
+aqli_gadm2_collapse_master_with_geom %>%
+  st_write(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_with_geom.shp"))
+
+# collapse the gadm2 file to gadm1 (state) level and write both geom and non-geom versions to their respective folders
+
+# collapse the gadm2 file to gadm0 (country) level and write both geom and non-geom versions to their respective folders
+
+```
 
 
-
+# Sanity checks area (deactivated for now)
+```{r sanity_checks, eval=FALSE, include=FALSE}
 #> sanity checks time-------------------------------------------------------------
 
 # 1: number of NA's in pollution for each colormap object id
