@@ -369,16 +369,39 @@ threshold_11 <- Sys.time()
 aqli_gadm2_collapse_master %>%
   write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom.csv"))
 
-# add in the geometry column by left joining the above with a color file and then write that to the collapsed/gadm2 folder
+# temp
+aqli_gadm2_collapse_master <- read_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom.csv"))
 
+#> add in the geometry column by left joining the above with a color file and then write that to the collapsed/gadm2 folder
+
+# joining the gadm2 collapse master file with colormap (using objectid as the joining column), to get the geometry column
 aqli_gadm2_collapse_master_with_geom <- aqli_gadm2_collapse_master %>%
   left_join(colormap %>% rename(objectid_gadm2 = objectid), by = "objectid_gadm2") %>%
   rename(iso_alpha3 = iso_alpha3.x) %>%
-  select(-c(iso_alpha3.y, NAME_0, NAME_1, NAME_2)) %>%
-  st_as_sf()
+  select(-c(iso_alpha3.y, NAME_0, NAME_1, NAME_2))
 
-# aqli_gadm2_collapse_master_with_geom %>%
-#   st_write(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_with_geom.shp"))
+# creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm2 collapse master dataset, to avoid any confusions.
+
+new_col_names_gadm2_collapse_master_geom_ver <- colnames(aqli_gadm2_collapse_master_with_geom) %>%
+  as_tibble() %>%
+  mutate(col_names_shortened = str_replace(value, "llpp", "ll"), 
+         col_names_shortened = str_replace(col_names_shortened, "_who_", "w"), 
+         col_names_shortened = str_replace(col_names_shortened, "_nat_", "n"), 
+         col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
+         col_names_shortened = str_replace(col_names_shortened, "_", ""), 
+         col_names_shortened = str_replace(col_names_shortened, "objectidgadm2", "objidgadm2"), 
+         col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
+  select(col_names_shortened) %>%
+  unlist() %>%
+  as.vector()
+
+# assigning new colnames to the geom version of the gadm2 collapse master file
+colnames(aqli_gadm2_collapse_master_with_geom) <- new_col_names_gadm2_collapse_master_geom_ver
+
+# making sure to st_as_sf the geom version before exporting to shape file
+aqli_gadm2_collapse_master_with_geom %>%
+  st_as_sf() %>%
+  sf::write_sf(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_with_geom.shp"))
 
 # collapse the gadm2 file to gadm1 (state) level and write both geom and non-geom versions to their respective folders
 
