@@ -421,8 +421,17 @@ print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " mi
 ```{r sanity_checks, eval=FALSE, include=FALSE}
 #> sanity checks time-------------------------------------------------------------
 
-# 1: number of NA's in pollution for each colormap object id
-foo <- arrow::open_dataset("D:/aqli.202.report.data.share/2023.publish.year.with.2021.data/rasterized/0.008/1999.parquet/part-0.parquet")
+#> 1: number of NA's in pollution for each colormap object id
+foo <- arrow::open_dataset("D:/aqli.2023.report.data.share/2023.publish.year.with.2021.data/rasterized/0.008/1999.parquet/part-0.parquet")
+
+# reading in the raw pollution raster for 1998
+pol_raw_1998_tmp <- raster::raster(str_c(pol_data_location, "V5GL03.HybridPM25-NoDust-NoSeaSalt.Global.199801-199812.nc"))
+
+pol_raw_2021_tmp <- raster::raster(str_c(pol_data_location, "V5GL03.HybridPM25-NoDust-NoSeaSalt.Global.202101-202112.nc"))
+
+val_pol_raw_1998_tmp <- values(pol_raw_1998_tmp)
+val_pol_raw_2021_tmp <- values(pol_raw_2021_tmp)
+
 
 aqli_gadm2_collapse_na_summary <- foo %>%
   dplyr::group_by(colormap_objectid) %>%
@@ -431,20 +440,32 @@ aqli_gadm2_collapse_na_summary <- foo %>%
     total_nas_pol = sum(is.na(pm2.5_pollution)), 
     prop_na = round((total_nas_pol/count_rows)*100, 2)) 
   
-# 2: number of object ids for which we do not have any data
+#> 2: number of object ids for which we do not have any data
 obj_id_missing <- which(colormap$objectid %notin% unique(aqli_gadm2_collapse_na_summary$colormap_objectid))
 
 colormap %>%
   filter(objectid %in% obj_id_missing) %>% 
   st_write("./experimentation/missing_obj_ids.shp")
 
-# 3: number of NAs in population for each colormap object id
+#> 3: number of NAs in population for each colormap object id
 aqli_gadm2_collapse_na_summary_pop <- foo %>%
   dplyr::group_by(colormap_objectid) %>%
   dplyr::collect() %>%
   dplyr::summarise(count_rows = n(),
     total_nas_pop = sum(is.na(population)), 
     prop_na = round((total_nas_pop/count_rows)*100, 2)) 
+
+#> Counting the total number of pixels corresponding that are NAs
+
+temp_1998 <- arrow::open_dataset("D:/aqli.2023.report.data.share/2023.publish.Year.with.2021.data/rasterized/0.008/1998.parquet/part-0.parquet", format = "parquet")
+
+foo <- temp_1998 %>%
+   group_by(colormap_objectid) %>%
+  collect() %>%
+  summarize(n = n())
+
+# 
+
 
 #-------------------------------------------------------------------------------
 ```
