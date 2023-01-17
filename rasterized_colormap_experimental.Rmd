@@ -141,11 +141,11 @@ colormap <- sf::st_read(str_c(shp_files_location, colormap_location, sep = ""))
 #-- this remains same for all pollution datasets, hence writing it, and will then simply read it
 # polygon_cells <- fasterize(colormap, pol_0.01_region_in_landscan_pop_res, field = "objectid", fun = "last")
 # writeRaster(polygon_cells,
-# 	filename = "./experimentation/colormap_rasterized.tif",
+# 	filename = "./experimentation/colormap_rasterized_0.01_jan2023.tif",
 # 	format = "GTiff", overwrite = TRUE)
 #---
 
-polygon_cells <- raster::raster("./experimentation/colormap_rasterized.tif")
+polygon_cells <- raster::raster("./experimentation/colormap_rasterized_0.01_jan2023.tif")
 
 
 # benchmarking
@@ -170,18 +170,21 @@ for (i in 1:length(pol_data_list)){
   pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
   
   # for testing purposes
-  if(i == 5){
-    break
+  if(i != 21){
+    next
   }
   
   # pollution file name given the current iteration
   cur_pol_file_name <- pol_data_list[i]
+  # cur_pol_file_name <- "V5GL03.HybridPM25-NoDust-NoSeaSalt.NoLandMask.Global.201801-201812"
   
   # cur pollution file year
   cur_pol_file_year <- stringr::str_extract(str_extract(cur_pol_file_name, "(\\d+)-(\\d+)"), "....")
+  # cur_pol_file_year <- 2018
   
   # read in the pollution raster for a given year
   pollution_dataset <- raster::raster(str_c(pol_data_location, cur_pol_file_name, sep = ""))
+  # pollution_dataset <- raster::raster("./experimentation/others/V5GL03.HybridPM25-NoDust-NoSeaSalt.NoLandMask.Global.201801-201812.nc")
   
   # naming the raw global pollution data and setting its crs
 crs(pollution_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
@@ -192,7 +195,10 @@ names(pollution_dataset) <- "pm2.5_pollution"
 threshold_2 <- Sys.time() 
 
 # matching the resolution of the cropped population and pollution datasets
-pol_0.01_region_in_landscan_pop_res <- foster::matchResolution(pollution_dataset, pop_raw_landscan_crop_pol)
+# pol_0.01_region_in_landscan_pop_res <- foster::matchResolution(pollution_dataset, pop_raw_landscan_crop_pol)
+pop_raw_landscan_crop_pol <- foster::matchResolution(pop_raw_landscan_crop_pol, pollution_dataset)
+
+pol_0.01_region_in_landscan_pop_res <- pollution_dataset
 
 # benchmarking
 threshold_3 <- Sys.time() 
@@ -350,6 +356,7 @@ aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
   dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who_{col}")) %>%
   dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat_{col}")) %>%
   dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(is.na(natstandard), "NA", .x))) %>%
   dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard, everything()) 
 
 # removing the substring "pm" from life expectancy column names
@@ -424,6 +431,8 @@ print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " mi
 #> 1: number of NA's in pollution for each colormap object id
 foo <- arrow::open_dataset("D:/aqli.2023.report.data.share/2023.publish.year.with.2021.data/rasterized/0.008/1999.parquet/part-0.parquet")
 
+no_landmask_2018_processed_0.008 <- arrow::open_dataset("C:/Users/Aarsh/Desktop/aqli-epic/sat.data.processing/experimentation/others/2018_0.008_noLandMask/2018.parquet.no.landmask/part-0.parquet")
+
 # reading in the raw pollution raster for 1998
 pol_raw_1998_tmp <- raster::raster(str_c(pol_data_location, "V5GL03.HybridPM25-NoDust-NoSeaSalt.Global.199801-199812.nc"))
 
@@ -439,6 +448,14 @@ aqli_gadm2_collapse_na_summary <- foo %>%
   dplyr::summarise(count_rows = n(),
     total_nas_pol = sum(is.na(pm2.5_pollution)), 
     prop_na = round((total_nas_pol/count_rows)*100, 2)) 
+
+aqli_gadm2_collapse_na_summary_no_landmask_2018_proc_0.008 <- no_landmask_2018_processed_0.008 %>%
+  dplyr::group_by(colormap_objectid) %>%
+  dplyr::collect() %>%
+  dplyr::summarise(count_rows = n(),
+    total_nas_pol = sum(is.na(pm2.5_pollution)), 
+    prop_na = round((total_nas_pol/count_rows)*100, 2)) 
+
   
 #> 2: number of object ids for which we do not have any data
 obj_id_missing <- which(colormap$objectid %notin% unique(aqli_gadm2_collapse_na_summary$colormap_objectid))
