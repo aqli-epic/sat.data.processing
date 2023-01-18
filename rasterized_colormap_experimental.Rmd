@@ -177,10 +177,10 @@ for (i in 1:length(pol_data_list)){
   
   pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
   
-  # # for testing purposes
-  # if(i != 16){
-  #   next
-  # }
+  # for testing purposes
+  if(i == 3){
+    break
+  }
   
   # pollution file name given the current iteration
   cur_pol_file_name <- pol_data_list[i]
@@ -304,7 +304,7 @@ threshold_10 <- Sys.time()
 
 # time it took to complete the current iteration
 
-print(str_c("Time taken to complete iteration # ", i, "/", (update_year - pol_data_start_year) + 1, ": " threshold_10 - threshold_1.5))
+print(str_c("Time taken to complete iteration # ", i, "/", (update_year - pol_data_start_year) + 1, ": ", threshold_10 - threshold_1.5))
 
 }
 
