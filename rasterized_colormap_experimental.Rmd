@@ -117,7 +117,7 @@ threshold_0 <- Sys.time()
 population_dataset <- raster::raster(str_c(pop_data_location, pop_data_file_name, sep = ""))
 
 # naming the raw global landscan population data and setting its crs to be the same as the pollution data
-crs(population_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+raster::crs(population_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 names(population_dataset) <- "population"
 
 
@@ -147,10 +147,13 @@ colormap <- sf::st_read(str_c(shp_files_location, colormap_location, sep = ""))
 
 polygon_cells <- raster::raster("./experimentation/colormap_rasterized.tif")
 
+# making sure that the crs of the rasterized shapefile is the same as the 0.008 population and pollution rasters. 
+raster::crs(polygon_cells) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 
 # benchmarking
 threshold_1 <- Sys.time() 
 
+print("All raw datasets read into R.")
 
 #> reading pollution data, one year at a time and then will concatenate all results-----------------------
 # Note that the datasets in this pipeline do not include the  geometry column. That can be added in the end after concatenating all yearly datasets into a single final gadm2 dataset. For the gadm0 and gadm1 datasets (which will be derived from the single "final gadm2 dataset"), a similar process will follow.
@@ -163,16 +166,21 @@ pol_col_name_vec <- c()
 
 #> for loop begins----------------------------------------------------------------
 
+print("For loop begins: Processing pollution rasters 1 year at a time")
+
 for (i in 1:length(pol_data_list)){
   
-  print(stringr::str_c("Iteration #", i, " begins"))
+  # benchmarking
+  threshold_1.5 <- Sys.time()
+  
+  print(stringr::str_c("Iteration #", i, "/", (update_year - pol_data_start_year) + 1, " begins"))
   
   pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
   
-  # for testing purposes
-  if(i == 5){
-    break
-  }
+  # # for testing purposes
+  # if(i != 16){
+  #   next
+  # }
   
   # pollution file name given the current iteration
   cur_pol_file_name <- pol_data_list[i]
@@ -184,7 +192,7 @@ for (i in 1:length(pol_data_list)){
   pollution_dataset <- raster::raster(str_c(pol_data_location, cur_pol_file_name, sep = ""))
   
   # naming the raw global pollution data and setting its crs
-crs(pollution_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+raster::crs(pollution_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 names(pollution_dataset) <- "pm2.5_pollution"
 
 
@@ -207,7 +215,7 @@ region_raster_brick <- pop_raw_landscan_crop_pol %>%
 names(region_raster_brick) <- c("population", "pm2.5_pollution")
 
 # set the same crs for pollution brick
-crs(region_raster_brick) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+raster::crs(region_raster_brick) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 
 print("Population and pollution layers matched")
 
@@ -260,14 +268,13 @@ print("rasterized dataframe coerced to an arrow table")
 
 # from this point forward, replace all instances of "pollution_district_wise" with "aqli_gadm2_collapse". Make sure that to make this update in all previous branches. If you are reading this, and if other branches still exist at this point. Make sure to make this update in those branches (even though you might end up using just this branch, its good to make that change).
 aqli_gadm2_collapse <- aqli_raster_brick_light %>%
+  dplyr::filter((!is.na(colormap_objectid)) & ((as.character(colormap_objectid) != "NA"))) %>%
   dplyr::group_by(colormap_objectid) %>%
   dplyr::collect() %>%
   dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE), 
          pollution_pop_weighted = pop_weights*pm2.5_pollution) %>%
   dplyr::summarise(total_population = sum(population, na.rm = TRUE), 
-            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE), 
-            lyl_rel_who = round((avg_pm2.5_pollution - who_pm2.5_standard)*aqli_lyl_constant, 2), 
-            lyl_rel_who = ifelse(lyl_rel_who < 0, 0, lyl_rel_who)) %>%
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
   dplyr::rename(objectid_gadm2 = colormap_objectid)
 
 # renaming the pollution column such that it includes the year in question
@@ -278,17 +285,33 @@ aqli_gadm2_collapse %>%
   readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, cur_pol_file_year, "_", gadm2_folder_name, ".csv"))
 
 # benchmarking
-threshold_8 <- Sys.time() # r1 (t8 to t9: 6.89 minutes), r2 (t8 to t9: 4.53 minutes)
+threshold_8 <- Sys.time() 
 
 
 
-print(str_c("Iteration #", i, " ends"))
- 
+print(stringr::str_c("Iteration #", i, "/", (update_year - pol_data_start_year) + 1, " end"))
+
+print("Freeing memory before proceeding to next iteration")
+
+# benchmarking
+threshold_9 <- Sys.time()
+
+# collect garbage, free memory
+gc()
+
+# benchmarking
+threshold_10 <- Sys.time()
+
+# time it took to complete the current iteration
+
+print(str_c("Time taken to complete iteration # ", i, "/", (update_year - pol_data_start_year) + 1, ": " threshold_10 - threshold_1.5))
+
 }
 
 end_time_main_pipeline <- Sys.time()
 time_diff <- end_time_main_pipeline - start_time
-print(str_c("Time taken (main pipeline for loop): ", time_diff, " minutes"))
+
+print(str_c("Total time taken (main pipeline for loop) with ", i, " years of pollution data processed: ", time_diff))
 
 #> for loop ends-----------------------------------------------------------------------
 
@@ -304,7 +327,7 @@ threshold_9 <- Sys.time()
 
 #> Output in VIT data sharing format
 
-# read in all pollution data and name_0, name_1, name_2 columns from colormap (joined in the first iteration of the loop below) into a single dataset, with just pollution columns. I am in the process of updating national standards, so for now we have a placeholder national standards column, which is just set to 10 micrograms per cubic meter for all regions.
+# read in all pollution data and name_0, name_1, name_2 columns from colormap (joined in the first iteration of the loop below) into a single dataset, with just pollution columns. I am in the process of updating national standards, so for now we have a placeholder national standards column, which is just set to 10 micrograms per cubic meter for all regions. The updated national standards column will be added alongside the life years lost columns after the below for loop.
 
 collapsed_gadm2_files_vec <- list.files(str_c(ssd_location_collapsed_gadm2_data_path)) %>% 
   sort()
@@ -315,7 +338,7 @@ for(i in 1:length(collapsed_gadm2_files_vec)){
     
     aqli_gadm2_collapse_master <- temp_gadm2 %>%
       dplyr::left_join(colormap, by = c("objectid_gadm2" = "objectid")) %>%
-      mutate(whostandard = 5, 
+      dplyr::mutate(whostandard = 5, 
              natstandard = 10) %>%
       dplyr::select(objectid_gadm2, iso_alpha3, NAME_0, NAME_1, NAME_2, total_population,
              whostandard, natstandard,
@@ -367,31 +390,31 @@ threshold_11 <- Sys.time()
 # write the above (non-geometry version) of gadm2 master file to the collapsed/gadm2 folder
 
 aqli_gadm2_collapse_master %>%
-  write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom.csv"))
+  readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom.csv"))
 
 # temp
-aqli_gadm2_collapse_master <- read_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom.csv"))
+aqli_gadm2_collapse_master <- readr::read_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom.csv"))
 
 #> add in the geometry column by left joining the above with a color file and then write that to the collapsed/gadm2 folder
 
 # joining the gadm2 collapse master file with colormap (using objectid as the joining column), to get the geometry column
 aqli_gadm2_collapse_master_with_geom <- aqli_gadm2_collapse_master %>%
-  left_join(colormap %>% rename(objectid_gadm2 = objectid), by = "objectid_gadm2") %>%
-  rename(iso_alpha3 = iso_alpha3.x) %>%
-  select(-c(iso_alpha3.y, NAME_0, NAME_1, NAME_2))
+  dplyr::left_join(colormap %>% rename(objectid_gadm2 = objectid), by = "objectid_gadm2") %>%
+  dplyr::rename(iso_alpha3 = iso_alpha3.x) %>%
+  dplyr::select(-c(iso_alpha3.y, NAME_0, NAME_1, NAME_2))
 
 # creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm2 collapse master dataset, to avoid any confusions.
 
 new_col_names_gadm2_collapse_master_geom_ver <- colnames(aqli_gadm2_collapse_master_with_geom) %>%
-  as_tibble() %>%
-  mutate(col_names_shortened = str_replace(value, "llpp", "ll"), 
+  dplyr::as_tibble() %>%
+  dplyr::mutate(col_names_shortened = str_replace(value, "llpp", "ll"), 
          col_names_shortened = str_replace(col_names_shortened, "_who_", "w"), 
          col_names_shortened = str_replace(col_names_shortened, "_nat_", "n"), 
          col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
          col_names_shortened = str_replace(col_names_shortened, "_", ""), 
          col_names_shortened = str_replace(col_names_shortened, "objectidgadm2", "objidgadm2"), 
          col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
-  select(col_names_shortened) %>%
+  dplyr::select(col_names_shortened) %>%
   unlist() %>%
   as.vector()
 
@@ -400,7 +423,7 @@ colnames(aqli_gadm2_collapse_master_with_geom) <- new_col_names_gadm2_collapse_m
 
 # making sure to st_as_sf the geom version before exporting to shape file
 aqli_gadm2_collapse_master_with_geom %>%
-  st_as_sf() %>%
+  sf::st_as_sf() %>%
   sf::write_sf(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_with_geom.shp"))
 
 # collapse the gadm2 file to gadm1 (state) level and write both geom and non-geom versions to their respective folders
@@ -464,8 +487,81 @@ foo <- temp_1998 %>%
   collect() %>%
   summarize(n = n())
 
-# 
+#> comparing the parquet files for 0.008 resolution's 2013 and 1998 years
+parquet_1998_0.008 <- arrow::open_dataset("D:/aqli.2023.report.data.share/2023.publish.year.with.2021.data/rasterized/0.008/1998.parquet/part-0.parquet")
 
+parquet_1998_0.008_summary <- parquet_1998_0.008 %>%
+    dplyr::group_by(colormap_objectid) %>%
+  dplyr::collect() %>%
+  dplyr::summarise(count_rows = n(),
+    total_nas_pol = sum(is.na(pm2.5_pollution)), 
+    prop_na = round((total_nas_pol/count_rows)*100, 2)) 
+
+parquet_2013_0.008 <- arrow::open_dataset("D:/aqli.2023.report.data.share/2023.publish.year.with.2021.data/rasterized/0.008/2013.parquet/part-0.parquet")
+
+parquet_2013_0.008_summary <- parquet_2013_0.008 %>%
+    dplyr::group_by(colormap_objectid) %>%
+  dplyr::collect() %>%
+  dplyr::filter(colormap_objectid != "NA") %>%
+  dplyr::summarise(count_rows = n(),
+    total_nas_pol = sum(is.na(pm2.5_pollution)), 
+    prop_na = round((total_nas_pol/count_rows)*100, 2)) 
+
+#> comparing the parquet files (0.008 resolution) to see if filtering out NAs before collecting is faster than doing it after collecting data locally in R. Testing both for 2013 (which has NAs as "NA") and 1998 (which has NA as NA special value)
+
+# 12 minutes
+foo <- parquet_1998_0.008 %>%
+    dplyr::group_by(colormap_objectid) %>%
+  dplyr::collect() %>%
+  dplyr::filter((!is.na(colormap_objectid)) & (colormap_objectid != "NA")) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         pollution_pop_weighted = pop_weights*pm2.5_pollution) %>%
+  dplyr::summarise(total_population = sum(population, na.rm = TRUE), 
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE), 
+            lyl_rel_who = round((avg_pm2.5_pollution - who_pm2.5_standard)*aqli_lyl_constant, 2), 
+            lyl_rel_who = ifelse(lyl_rel_who < 0, 0, lyl_rel_who)) %>%
+  dplyr::rename(objectid_gadm2 = colormap_objectid)
+
+# 12 minutes
+t1 <- Sys.time()
+foo1 <- parquet_1998_0.008 %>%
+    dplyr::group_by(colormap_objectid) %>%
+  dplyr::collect() %>%
+  dplyr::filter((!is.na(colormap_objectid)) & (colormap_objectid != "NA")) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         pollution_pop_weighted = pop_weights*pm2.5_pollution) %>%
+  dplyr::summarise(total_population = sum(population, na.rm = TRUE), 
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
+  dplyr::rename(objectid_gadm2 = colormap_objectid)
+t2 <- Sys.time()  
+
+# 1.56 minutes to 3 minutes, wow!!! 
+t3 <- Sys.time()
+foo2 <- parquet_1998_0.008 %>%
+   dplyr::filter((!is.na(colormap_objectid)) & ((as.character(colormap_objectid) != "NA"))) %>%
+    dplyr::group_by(colormap_objectid) %>%
+  dplyr::collect() %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         pollution_pop_weighted = pop_weights*pm2.5_pollution) %>%
+  dplyr::summarise(total_population = sum(population, na.rm = TRUE), 
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
+  dplyr::rename(objectid_gadm2 = colormap_objectid)
+t4 <- Sys.time()
+
+# 4.62 minutes
+t5 <- Sys.time()
+foo2 <- parquet_1998_0.008 %>%
+   dplyr::filter((!is.na(colormap_objectid)) & ((as.character(colormap_objectid) != "NA"))) %>%
+  dplyr::group_by(colormap_objectid) %>%
+  dplyr::collect() %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         pollution_pop_weighted = pop_weights*pm2.5_pollution) %>%
+  dplyr::summarise(total_population = sum(population, na.rm = TRUE), 
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE), 
+            lyl_rel_who = round((avg_pm2.5_pollution - who_pm2.5_standard)*aqli_lyl_constant, 2), 
+            lyl_rel_who = ifelse(lyl_rel_who < 0, 0, lyl_rel_who)) %>%
+  dplyr::rename(objectid_gadm2 = colormap_objectid)
+t6 <- Sys.time()
 
 #-------------------------------------------------------------------------------
 ```
