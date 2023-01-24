@@ -1,6 +1,6 @@
 ---
 title: "v1 of the new workflow: to be shared with VIT by January 15th, 2023"
-author: "Aarsh"
+author: "Aarsh (aarshbatra@uchicagotrust.org/aarshbatra.in@gmail.com)"
 date: '2022-10-18'
 output: html_document
 ---
@@ -26,7 +26,7 @@ library(DBI) # for connecting R with Postgres
 library(RPostgres)
 library(ggplot2)
 library(RPostgres)
-library(sparklyr)
+# library(sparklyr)
 library(data.table)
 library(stringr)
 
@@ -59,14 +59,25 @@ pop_data_file_name <- "landscan-global-2021.tif"
 
 
 
-# shapefiles
+#> shapefiles
+
+# general shape file folder location
 shp_files_location <- "./ar.2023.update.using.2021.pol.data/data/intermediate/1_population_and_colormap/1_shapefile_aggregate/"
 
+# gadm2 shape file location
 colormap_location <- "colormap/colormap.shp"
 
+# hover map shape file location (not using this year)
 hovermap_location <- "hover/hover.shp"
 
-# raster resolution of the final data brick (containing a rasterized pollution, population and a rasterized shape file)
+# gadm0 shape file location
+gadm0_shp_file_location <- "colormap_collapsed_gadm0/aqli_gadm2_collapse_to_gadm0.shp" 
+
+# gadm1 shape file location
+gadm1_shp_file_location <- "colormap_collapsed_gadm1/aqli_gadm2_collapse_to_gadm1.shp" 
+
+
+#> raster resolution of the final data brick (containing a rasterized pollution, population and a rasterized shape file)
 raster_res <- 0.008
 
 # data timeline (note)
@@ -91,6 +102,11 @@ aqli_data_share_folder_name <- "aqli.2023.report.data.share"
 
 # high res data location
 ssd_location_rasterized_data_0.008 <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".data", "/rasterized/", raster_res, "/", sep = "")
+
+# updated national standards file location and file name
+national_standards_pm2.5_jan_2023_location <- "./ar.2023.update.using.2021.pol.data/data/input/standards/" 
+
+national_standards_pm2.5_jan_2023_file_name <- "country_annual_average_pm2.5_standards_asInJan2023.csv"
 
 #> collapsed data path: gadm0 level
 ssd_location_collapsed_gadm0_data_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", gadm0_folder_name, "/", sep  = "")
@@ -178,9 +194,13 @@ for (i in 1:length(pol_data_list)){
   pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
   
   # for testing purposes
-  if(i == 3){
-    break
+  if(i < 12){
+    next
   }
+  
+  # if(i > 10){
+  #   break
+  # }
   
   # pollution file name given the current iteration
   cur_pol_file_name <- pol_data_list[i]
@@ -322,19 +342,40 @@ print(str_c("Total time taken (main pipeline for loop) with ", i, " years of pol
 
 ```{r combine_yearly_pol_data, echo=FALSE}
 
+#---------
+#> Note: if you have already processed the pollution datasets in the above chunk and just want to run the combining code in this chunk, make sure to uncomment the following code and run it before proceeding to get the colormap and pol_col_name_vec. Also, make sure to run the "setup" and "set path" chunks. If you have already run the above chunks, then you would already have these objects and in that case there is no need to run the below commented code.
+
+# load latest colormap shapefile for (last complete updated: November, 2022)
+colormap <- sf::st_read(str_c(shp_files_location, colormap_location, sep = ""))
+
+# generate the pol_col_name_vec
+pol_col_name_vec <- c()
+for(i in 1:24){
+     pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
+ }
+
+#-----------
+
 # benchmarking
-threshold_9 <- Sys.time() 
+threshold_11 <- Sys.time() 
 
 #> Output in VIT data sharing format
 
 # read in all pollution data and name_0, name_1, name_2 columns from colormap (joined in the first iteration of the loop below) into a single dataset, with just pollution columns. I am in the process of updating national standards, so for now we have a placeholder national standards column, which is just set to 10 micrograms per cubic meter for all regions. The updated national standards column will be added alongside the life years lost columns after the below for loop.
 
+# list of files in the collapsed folder
 collapsed_gadm2_files_vec <- list.files(str_c(ssd_location_collapsed_gadm2_data_path)) %>% 
-  sort()
+  sort() 
 
-for(i in 1:length(collapsed_gadm2_files_vec)){
+# indices of the relevant files (from the above vector) needed for combining.
+collapsed_gadm2_files_vec_rel_ind <- str_detect(collapsed_gadm2_files_vec, ".csv")
+
+# keeping only relevant files that will be combined below
+collapsed_gadm2_files_vec_rel_files <- collapsed_gadm2_files_vec[collapsed_gadm2_files_vec_rel_ind]
+
+for(i in 1:length(collapsed_gadm2_files_vec_rel_files)){
   if(i == 1){
-    temp_gadm2 <- readr::read_csv(str_c(ssd_location_collapsed_gadm2_data_path, collapsed_gadm2_files_vec[i]))
+    temp_gadm2 <- readr::read_csv(str_c(ssd_location_collapsed_gadm2_data_path, collapsed_gadm2_files_vec_rel_files[i]))
     
     aqli_gadm2_collapse_master <- temp_gadm2 %>%
       dplyr::left_join(colormap, by = c("objectid_gadm2" = "objectid")) %>%
@@ -351,11 +392,11 @@ for(i in 1:length(collapsed_gadm2_files_vec)){
     colnames(aqli_gadm2_collapse_master)[ncol(aqli_gadm2_collapse_master)] <- pol_col_name_vec[i]
     
   } else{
-     temp_gadm2 <- readr::read_csv(str_c(ssd_location_collapsed_gadm2_data_path, collapsed_gadm2_files_vec[i]))
+     temp_gadm2 <- readr::read_csv(str_c(ssd_location_collapsed_gadm2_data_path, collapsed_gadm2_files_vec_rel_files[i]))
     
     aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>% 
       dplyr::left_join(temp_gadm2, by  = "objectid_gadm2") %>%
-      dplyr::select(-c(total_population, lyl_rel_who)) %>%
+      dplyr::select(-c(total_population)) %>%
       dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard, pol_col_name_vec[1:(i-1)],
              pol_col_name_vec[i])
     
@@ -365,35 +406,49 @@ for(i in 1:length(collapsed_gadm2_files_vec)){
 }
 
 # benchmarking
-threshold_10 <- Sys.time() 
+threshold_12 <- Sys.time() 
 
-# adding in the life years lost columns
+#> add in the updated national standards column (last updated: January 18, 2023 by Aarsh) and bring it in appropriate "join ready" format (to be joined with the combined pollution data before adding life years lost columns)
+
+# reading in the national standards file
+national_standards_pm2.5 <- readr::read_csv(stringr::str_c(national_standards_pm2.5_jan_2023_location, national_standards_pm2.5_jan_2023_file_name, sep = ""))
+
+# keeping and renaming relevant columns
+national_standards_pm2.5 <- national_standards_pm2.5 %>%
+  dplyr::select(country, natstandard_pm2.5_new_2023_report_micr_grm_cubic_meter_op1) %>%
+  dplyr::rename(natstandard_updated = natstandard_pm2.5_new_2023_report_micr_grm_cubic_meter_op1)
+
+# replacing the national standards column of the aqli_gadm_collapse_master file (output of the above for loop) with the updated national standards column
+aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
+  dplyr::left_join(national_standards_pm2.5, by = "country") %>%
+  dplyr::select(-c(natstandard)) %>%
+  dplyr::select(objectid_gadm2:whostandard, natstandard_updated, dplyr::everything()) %>%
+  dplyr::rename(natstandard = natstandard_updated)
+
+# replace natstandard == "No national standard", with natstandard == 0, and then changing its data type to "numeric"
+aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == "No national standard", 0, natstandard))
+
+aqli_gadm2_collapse_master$natstandard <- as.numeric(aqli_gadm2_collapse_master$natstandard)
+  
+# adding in the life years lost columns and doing some basic cleaning of column names to bring it into the format that we want, as per the AQLI data dictionary
 
 aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
   dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who_{col}")) %>%
   dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat_{col}")) %>%
   dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
-  dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard, everything()) 
-
-# removing the substring "pm" from life expectancy column names
-colnames(aqli_gadm2_collapse_master)[str_detect(colnames(aqli_gadm2_collapse_master), "llpp")] <- stringr::str_remove(colnames(aqli_gadm2_collapse_master)[stringr::str_detect(colnames(aqli_gadm2_collapse_master), "llpp")], "pm")
-
-
-# round all pm and lyl columns to two decimal places
-aqli_gadm2_collapse_master[, stringr::str_detect(colnames(aqli_gadm2_collapse_master), "llpp|pm")] <- aqli_gadm2_collapse_master %>%
-  dplyr::select(-c(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard)) %>%
-  purrr::map_df(round, 2) 
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard, everything()) %>%
+    dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 1)), .names = "{col}"))
 
 # benchmarking
-threshold_11 <- Sys.time() 
+threshold_13 <- Sys.time() 
 
 # write the above (non-geometry version) of gadm2 master file to the collapsed/gadm2 folder
 
 aqli_gadm2_collapse_master %>%
-  readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom.csv"))
-
-# temp
-aqli_gadm2_collapse_master <- readr::read_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom.csv"))
+  readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom_Jan192023.csv"))
 
 #> add in the geometry column by left joining the above with a color file and then write that to the collapsed/gadm2 folder
 
@@ -421,20 +476,159 @@ new_col_names_gadm2_collapse_master_geom_ver <- colnames(aqli_gadm2_collapse_mas
 # assigning new colnames to the geom version of the gadm2 collapse master file
 colnames(aqli_gadm2_collapse_master_with_geom) <- new_col_names_gadm2_collapse_master_geom_ver
 
-# making sure to st_as_sf the geom version before exporting to shape file
+# making sure to st_as_sf the geom version before exporting to shape file and then exporting the shape file
+aqli_gadm2_collapse_master_with_geom <- aqli_gadm2_collapse_master_with_geom %>%
+  sf::st_as_sf() 
+
 aqli_gadm2_collapse_master_with_geom %>%
-  sf::st_as_sf() %>%
-  sf::write_sf(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_with_geom.shp"))
+  sf::write_sf(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_with_geom_Jan192023.shp"))
 
-# collapse the gadm2 file to gadm1 (state) level and write both geom and non-geom versions to their respective folders
-
-#tbd
-
-# collapse the gadm2 file to gadm0 (country) level and write both geom and non-geom versions to their respective folders
+#-----------
 
 
-#tbd
+#> collapse the gadm2 file to gadm0 (country) level and write both geom and non-geom versions to their respective folders
 
+# finalizing the gadm0 level dataset
+aqli_gadm0_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
+  dplyr::group_by(country) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+  dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+  dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                   total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  select(objectid_gadm2, iso_alpha3, country, total_population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+  dplyr::rename(population = total_population, 
+                objectid_gadm0 = objectid_gadm2) %>%
+  dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+    dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who_{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat_{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm0, iso_alpha3, country, population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 1)), .names = "{col}"))
+  
+
+# write the above (non-geometry version) of gadm0 master file to the collapsed/gadm0 folder
+aqli_gadm0_collapse_from_gadm2 %>%
+  readr::write_csv(str_c(ssd_location_collapsed_gadm0_data_path, "master_global_allyears_gadm0_non_geom_Jan192023.csv"))
+
+
+# read in the gadm0 shape file (which is collapsed from the colormap) and get it ready for joining with the above summary table
+
+gadm0_shp_file <- sf::st_read(str_c(shp_files_location, gadm0_shp_file_location, sep = ""))
+
+gadm0_shp_file_subset <- gadm0_shp_file %>%
+  dplyr::select(-c(NAME_1, NAME_2, objectid, iso_alpha3))
+
+# add in the geometry column by left joining the above with a country level shape file and then write that to the collapsed/gadm0 folder
+
+# joining the gadm0 collapse master file with the country level shapefile (using "country/NAME_0" as the joining column), to get the geometry column
+
+aqli_gadm0_collapse_from_gadm2_with_geom <- aqli_gadm0_collapse_from_gadm2 %>%
+  dplyr::left_join(gadm0_shp_file_subset, by = c("country" = "NAME_0")) %>%
+  sf::st_as_sf()
+
+# (tbd): creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm0 collapse master dataset, to avoid any confusions.
+
+new_col_names_gadm0_collapse_from_gadm2 <- colnames(aqli_gadm0_collapse_from_gadm2_with_geom) %>%
+  dplyr::as_tibble() %>%
+  dplyr::mutate(col_names_shortened = str_replace(value, "llpp", "ll"), 
+         col_names_shortened = str_replace(col_names_shortened, "_who_", "w"), 
+         col_names_shortened = str_replace(col_names_shortened, "_nat_", "n"), 
+         col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
+         col_names_shortened = str_replace(col_names_shortened, "_", ""), 
+         col_names_shortened = str_replace(col_names_shortened, "objectidgadm0", "objidgadm0"), 
+         col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
+  dplyr::select(col_names_shortened) %>%
+  unlist() %>%
+  as.vector()
+
+
+# (tbd): assigning new colnames to the geom version of the gadm0 collapse master file
+colnames(aqli_gadm0_collapse_from_gadm2_with_geom) <- new_col_names_gadm0_collapse_from_gadm2
+
+# (tbd): making sure to st_as_sf the geom version before exporting to shape file and then exporting the shape file
+
+aqli_gadm0_collapse_from_gadm2_with_geom <- aqli_gadm0_collapse_from_gadm2_with_geom %>%
+  sf::st_as_sf()
+
+aqli_gadm0_collapse_from_gadm2_with_geom %>%
+  sf::st_write(str_c(ssd_location_collapsed_gadm0_data_path, "master_global_allyears_gadm0_with_geom_Jan192023_.shp"), delete_layer = TRUE)
+
+#-----------
+
+#>  collapse the gadm2 file to gadm1 (state/province) level and write both geom and non-geom versions to their respective folders
+
+# finalizing the gadm1 level dataset
+aqli_gadm1_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
+  dplyr::group_by(country, name_1) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+  dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+  dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                   total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  select(objectid_gadm2, iso_alpha3, country, name_1, total_population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+  dplyr::rename(population = total_population, 
+                objectid_gadm1 = objectid_gadm2) %>%
+  dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+    dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who_{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat_{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm1, iso_alpha3, country, name_1, population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 1)), .names = "{col}"))
+  
+
+# write the above (non-geometry version) of gadm1 master file to the collapsed/gadm1 folder
+aqli_gadm1_collapse_from_gadm2 %>%
+  readr::write_csv(str_c(ssd_location_collapsed_gadm1_data_path, "master_global_allyears_gadm1_non_geom_Jan192023.csv"))
+
+# read in the gadm1 shape file (which is collapsed from the colormap) and get it ready for joining with the above summary table
+
+gadm1_shp_file <- sf::st_read(str_c(shp_files_location, gadm1_shp_file_location, sep = ""))
+
+
+gadm1_shp_file_subset <- gadm1_shp_file %>%
+  dplyr::select(-c(NAME_2, objectid, iso_alpha3))
+
+# (tbd) add in the geometry column by left joining the above with a state level shape file and then write that to the collapsed/gadm1 folder
+
+# joining the gadm1 collapse master file with the state level shapefile (using " " as the joining column), to get the geometry column
+
+aqli_gadm1_collapse_from_gadm2_with_geom <- aqli_gadm1_collapse_from_gadm2 %>%
+  dplyr::left_join(gadm1_shp_file_subset, by = c("country" = "NAME_0", "name_1" = "NAME_1")) %>%
+  sf::st_as_sf()
+
+
+# (tbd): creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm1 collapse master dataset, to avoid any confusions.
+
+new_col_names_gadm1_collapse_from_gadm2 <- colnames(aqli_gadm1_collapse_from_gadm2_with_geom) %>%
+  dplyr::as_tibble() %>%
+  dplyr::mutate(col_names_shortened = str_replace(value, "llpp", "ll"), 
+         col_names_shortened = str_replace(col_names_shortened, "_who_", "w"), 
+         col_names_shortened = str_replace(col_names_shortened, "_nat_", "n"), 
+         col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
+         col_names_shortened = str_replace(col_names_shortened, "_", ""), 
+         col_names_shortened = str_replace(col_names_shortened, "objectidgadm1", "objidgadm1"), 
+         col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
+  dplyr::select(col_names_shortened) %>%
+  unlist() %>%
+  as.vector()
+
+# (tbd): assigning new colnames to the geom version of the gadm1 collapse master file
+colnames(aqli_gadm1_collapse_from_gadm2_with_geom) <- new_col_names_gadm1_collapse_from_gadm2
+
+# (tbd): making sure to st_as_sf the geom version before exporting to shape file and then exporting the shape file
+
+aqli_gadm1_collapse_from_gadm2_with_geom <- aqli_gadm1_collapse_from_gadm2_with_geom %>%
+  sf::st_as_sf()
+
+aqli_gadm1_collapse_from_gadm2_with_geom %>%
+  sf::st_write(str_c(ssd_location_collapsed_gadm1_data_path, "master_global_allyears_gadm1_with_geom_Jan192023.shp"), delete_layer = TRUE)
+
+#-----------
 end_time_vit_data_pipeline <- Sys.time()
 print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " minutes?"))
 ```
@@ -563,5 +757,114 @@ foo2 <- parquet_1998_0.008 %>%
   dplyr::rename(objectid_gadm2 = colormap_objectid)
 t6 <- Sys.time()
 
+# gadm2 level final shapefile test and plot map
+
+map1_global_aqli_color_scale_region_data <- aqli_gadm2_collapse_master_with_geom %>%
+  mutate(lyl_aqli_bucket = ifelse((llw2020 >= 0) & (llw2020 < 0.1), "0 - < 0.1 years", NA), 
+         lyl_aqli_bucket = ifelse((llw2020 >= 0.1) & (llw2020 < 0.5), "0.1 - < 0.5", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llw2020 >= 0.5) & (llw2020 < 1), "0.5 - < 1", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llw2020 >= 1) & (llw2020 < 2), "1 - < 2", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llw2020 >= 2) & (llw2020 < 3), "2 - < 3", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llw2020 >= 3) & (llw2020 < 4), "3 - < 4", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llw2020 >= 4) & (llw2020 < 5), "4 - < 5", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llw2020 >= 5) & (llw2020 < 6), "5 - < 6", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llw2020 >= 6), ">= 6 years", lyl_aqli_bucket)) %>%
+  mutate(order_var = ifelse(lyl_aqli_bucket == "0 - < 0.1 years", 1, NA), 
+         order_var = ifelse(lyl_aqli_bucket == "0.1 - < 0.5", 2, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "0.5 - < 1", 3, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "1 - < 2", 4, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "2 - < 3", 5, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "3 - < 4", 6, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "4 - < 5", 7, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "5 - < 6", 8, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == ">= 6 years", 9, order_var)) 
+
+# map1
+map1_global_aqli_color_scale_region_data %>%
+  filter(country == "United States", name1 %notin% c("Alaska")) %>%
+  ggplot() +
+  geom_sf(mapping = aes(fill = lyl_aqli_bucket), color = "transparent") +
+  scale_fill_manual(values = c("0 - < 0.1 years" = "#FFFFFF", "0.1 - < 0.5" = "#FFE6B3", "0.5 - < 1" = "#FFD25D", 
+                                "1 - < 2" = "#FFBA00", "2 - < 3" = "#FF9600", "3 - < 4" = "#FF6908", 
+                                "4 - < 5" = "#E63D23", "5 - < 6" = "#BD251C", ">= 6 years" = "#8C130E")) +
+  ggthemes::theme_map() +
+  labs(fill = "Gain in years of Life Expectancy", title = "AQLI 2021 data: Life years lost") +
+  theme(legend.position = "bottom", 
+        plot.title = element_text(size = 15, hjust = 0.5), 
+        legend.justification = c(0.5, 3), 
+        plot.background = element_rect(fill = "aliceblue")) +
+    guides(fill = guide_legend(nrow = 1)) 
+
+ggsave(filename = "./experimentation/test_aqli_global_2021_map.pdf", plot = map1_global_aqli_color_scale, height = 14, width = 14)
+
+# map2
+
 #-------------------------------------------------------------------------------
+
+# Taking a look at Al Qahirah, Egypt
+
+egypt_missing_region_1 <- colormap %>% filter(NAME_0 == "Egypt", NAME_1 == "Al Qahirah", NAME_2 == "Bab ash-Sha'riyah") 
+
+st_coordinates(egypt_missing_region_1)
+
+# Taking a look at 2018 raw net cdf file
+pol_2018_0.01_test <- raster::raster("./ar.2023.update.using.2021.pol.data/data/input/pollution/0.01x0.01/GWRPM25-NoDust-NoSeaSalt_0.01_0.01/GWRPM25-NoDust-NoSeaSalt/Annual/V5GL03.HybridPM25-NoDust-NoSeaSalt.Global.201801-201812.nc")
+
+raster::crs(pol_2018_0.01_test) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84"
+
+pol_2018_0.01_test_df <- raster::as.data.frame(pol_2018_0.01_test)
+
+df_test <- tibble(lat = coordinates(pol_2018_0.01_test)[, 2], 
+                  lon = coordinates(pol_2018_0.01_test)[, 1], 
+                  pm2.5 = pol_2018_0.01_test_df$Hybrid.PM_2_._5.with.mineral.dust.and.seasalt.removed...mug.m.3.)
+
+df_test1 <- arrow::open_dataset("./experimentation/df_test.parquet/part-0.parquet", format = "parquet")
+
+df_test1_point <- df_test1 %>%
+  dplyr::filter(lat >= 30.035, lat <= 30.045, lon >= 31.240, lon <= 31.246) %>%
+  dplyr::collect()
+
+
+df_test %>% arrow::write_dataset("./experimentation/df_test.parquet", format = "parquet")
+
+# using nc package
+
+pol_2018_0.01_test_nc_fun <- nc_open("./ar.2023.update.using.2021.pol.data/data/input/pollution/0.01x0.01/GWRPM25-NoDust-NoSeaSalt_0.01_0.01/GWRPM25-NoDust-NoSeaSalt/Annual/V5GL03.HybridPM25-NoDust-NoSeaSalt.Global.201801-201812.nc")
+
+
+df_test <- tibble(latitude = lat, longitude = lon, pm2.5 = pol_2018_0.01_test_df$Hybrid.PM_2_._5.with.mineral.dust.and.seasalt.removed...mug.m.3.)
+
+# tmp
+
+shp_protests_us <- st_read("./experimentation/others/merged_protest_shp/merged_01.shp")
+
+gadm1_shp_file_us <- gadm1_shp_file %>% 
+  filter(NAME_0 == "United States", NAME_1 %notin% c("Alaska", "Hawaii"))
+
+shp_protest_us_subset <- shp_protests_us %>% 
+  filter(stat_nm %notin% c("alaska", "hawaii")) %>%
+  mutate(protest_bucket = ifelse(ttl_prt == 0, "No protests", ttl_prt), 
+         protest_bucket = ifelse((ttl_prt > 0 & ttl_prt <= 5), ">0 - 5", protest_bucket), 
+         protest_bucket = ifelse((ttl_prt > 5 & ttl_prt <= 10), ">5 - 10", protest_bucket), 
+         protest_bucket = ifelse((ttl_prt > 10 & ttl_prt <= 20), ">10 - 20", protest_bucket), 
+         protest_bucket = ifelse((ttl_prt > 20 & ttl_prt <= 40), ">20 - 40", protest_bucket), 
+         protest_bucket = ifelse((ttl_prt > 40 & ttl_prt <= 100), ">40 - 100", protest_bucket), 
+         protest_bucket = ifelse((ttl_prt > 100), ">100 protests", protest_bucket))
+
+plt <- shp_protest_us_subset %>%
+  ggplot(mapping = aes(fill = protest_bucket)) +  
+  geom_sf(data = gadm1_shp_file_us, fill = "transparent") +
+  geom_sf() +
+  ggthemes::theme_map() +
+  scale_fill_manual(values = c("No protests" = "white", 
+                               ">0 - 5" = "#FFE6B3", 
+                               ">5 - 10" = "#FFBA00", 
+                               ">10 - 20" = "#FF9600", 
+                               ">20 - 40" = "#E63D23", 
+                               ">40 - 100" = "#BD251C", 
+                               ">100 protests" = "#8C130E")) +
+  theme(legend.position = "bottom", 
+        legend.justification = c(0.5, 3)) +
+   guides(fill = guide_legend(nrow = 1)) + 
+  labs(fill = "Protest Count")
 ```
