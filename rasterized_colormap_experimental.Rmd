@@ -633,7 +633,6 @@ end_time_vit_data_pipeline <- Sys.time()
 print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " minutes?"))
 ```
 
-
 # Sanity checks area (deactivated for now)
 ```{r sanity_checks, eval=FALSE, include=FALSE}
 #> sanity checks time-------------------------------------------------------------
@@ -801,7 +800,7 @@ ggsave(filename = "./experimentation/test_aqli_global_2021_map.pdf", plot = map1
 
 #-------------------------------------------------------------------------------
 
-# Taking a look at Al Qahirah, Egypt
+# Taking a look at Al Qahirah, Egypt (sanity check suggested by Aaron)
 
 egypt_missing_region_1 <- colormap %>% filter(NAME_0 == "Egypt", NAME_1 == "Al Qahirah", NAME_2 == "Bab ash-Sha'riyah") 
 
@@ -821,7 +820,7 @@ df_test <- tibble(lat = coordinates(pol_2018_0.01_test)[, 2],
 df_test1 <- arrow::open_dataset("./experimentation/df_test.parquet/part-0.parquet", format = "parquet")
 
 df_test1_point <- df_test1 %>%
-  dplyr::filter(lat >= 30.035, lat <= 30.045, lon >= 31.240, lon <= 31.246) %>%
+  dplyr::filter(lat >= 30, lat <= 30.07, lon >= 31.1, lon <= 31.3) %>%
   dplyr::collect()
 
 
@@ -834,37 +833,184 @@ pol_2018_0.01_test_nc_fun <- nc_open("./ar.2023.update.using.2021.pol.data/data/
 
 df_test <- tibble(latitude = lat, longitude = lon, pm2.5 = pol_2018_0.01_test_df$Hybrid.PM_2_._5.with.mineral.dust.and.seasalt.removed...mug.m.3.)
 
-# tmp
+#> Sanity checks on the AQLI 2021 processed dataset
 
-shp_protests_us <- st_read("./experimentation/others/merged_protest_shp/merged_01.shp")
+#- Comparing population column of color_2020 with the 2021 color file (gadm2)
 
-gadm1_shp_file_us <- gadm1_shp_file %>% 
-  filter(NAME_0 == "United States", NAME_1 %notin% c("Alaska", "Hawaii"))
+# 2020 aqli data
+color_2020 <- read_csv("C:/Users/Aarsh/Desktop/aqli_2020_data/color_2020.csv")
 
-shp_protest_us_subset <- shp_protests_us %>% 
-  filter(stat_nm %notin% c("alaska", "hawaii")) %>%
-  mutate(protest_bucket = ifelse(ttl_prt == 0, "No protests", ttl_prt), 
-         protest_bucket = ifelse((ttl_prt > 0 & ttl_prt <= 5), ">0 - 5", protest_bucket), 
-         protest_bucket = ifelse((ttl_prt > 5 & ttl_prt <= 10), ">5 - 10", protest_bucket), 
-         protest_bucket = ifelse((ttl_prt > 10 & ttl_prt <= 20), ">10 - 20", protest_bucket), 
-         protest_bucket = ifelse((ttl_prt > 20 & ttl_prt <= 40), ">20 - 40", protest_bucket), 
-         protest_bucket = ifelse((ttl_prt > 40 & ttl_prt <= 100), ">40 - 100", protest_bucket), 
-         protest_bucket = ifelse((ttl_prt > 100), ">100 protests", protest_bucket))
+# 2021 aqli datasets
+aqli_gadm2_collapse_master <- read_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom_Jan192023.csv"))
 
-plt <- shp_protest_us_subset %>%
-  ggplot(mapping = aes(fill = protest_bucket)) +  
-  geom_sf(data = gadm1_shp_file_us, fill = "transparent") +
-  geom_sf() +
-  ggthemes::theme_map() +
-  scale_fill_manual(values = c("No protests" = "white", 
-                               ">0 - 5" = "#FFE6B3", 
-                               ">5 - 10" = "#FFBA00", 
-                               ">10 - 20" = "#FF9600", 
-                               ">20 - 40" = "#E63D23", 
-                               ">40 - 100" = "#BD251C", 
-                               ">100 protests" = "#8C130E")) +
-  theme(legend.position = "bottom", 
-        legend.justification = c(0.5, 3)) +
-   guides(fill = guide_legend(nrow = 1)) + 
-  labs(fill = "Protest Count")
+aqli_gadm0_collapse_from_gadm2 <- read_csv(str_c(ssd_location_collapsed_gadm0_data_path, "master_global_allyears_gadm0_non_geom_Jan192023.csv"))
+
+aqli_gadm1_collapse_from_gadm2 <- read_csv(str_c(ssd_location_collapsed_gadm1_data_path, "master_global_allyears_gadm1_non_geom_Jan192023.csv"))
+
+# joining 2020 gadm2 dataset with 2021 gadm2 dataset and comparing the population column
+gadm2_2020_2021_pop_compare <- color_2020 %>% # 46702 rows
+  select(country, name_1, name_2, population) %>%
+  rename(population_old = population) %>%
+  left_join(aqli_gadm2_collapse_master %>% select(country, name_1, name_2, population))
+
+# looking at a subset that contains only those rows in which we have a population number for both 2021 and 2020 data
+gadm2_2020_2021_pop_compare_sub <- gadm2_2020_2021_pop_compare %>% # 42679 rows
+  filter(!is.na(population_old) & !is.na(population)) 
+
+# calculate pop difference b/w 2021 and 2020 gadm 2 level data
+gadm2_2020_2021_pop_compare_sub <- gadm2_2020_2021_pop_compare_sub %>%
+  mutate(pop_diff = population - population_old)
+
+# For places, where population has decreased, plotting a distribution of abs(pop_diff). It seems like at max population has decreased by 10^5. Note that there were many border changes and regrouping of regions and shapefile updates. I personally don't think that its unreasonable. But still check
+plt <- gadm2_2020_2021_pop_compare_sub %>%
+  filter(pop_diff < 0) %>%
+  mutate(pop_diff_abs = abs(pop_diff)) %>%
+  ggplot() +
+  geom_density(mapping = aes(x = log10(pop_diff_abs)), color = "black")
+
+# comparing population distribution of color_2020 with color_2021
+plt <- gadm2_2020_2021_pop_compare_sub %>%
+  ggplot() +
+  geom_histogram(mapping = aes(x = log10(population)), color = "white", fill = "cornflowerblue", alpha = 0.3) + 
+  geom_histogram(mapping = aes(x = log10(population_old)), color = "white", fill = "red", alpha = 0.3)
+
+#> check if any place (at gadm2/1/0) has a population of 0, yes: 97 places
+pop_0_gadm2_regions <- aqli_gadm2_collapse_master %>%   # 97 regions
+  filter(population == 0)
+
+pop_0_gadm1_regions <- aqli_gadm1_collapse_from_gadm2 %>% # 27 regions
+  filter(population == 0)
+
+pop_0_gadm0_regions <- aqli_gadm0_collapse_from_gadm2 %>% # 6 regions 
+  filter(population == 0)
+
+
+# look for the above missing gadm2 regions in color_2020 file
+color_2020 %>%
+  filter(country %in% unique(pop_0_gadm2_regions$country), 
+         name_1 %in% unique(pop_0_gadm2_regions$name_1), 
+         name_2 %in% unique(pop_0_gadm2_regions$name_2)) %>%
+  View()
+
+# compare pm2.5 pollution distribution for 2020 v/s 2021 pollution data
+
+plt <- color_2020 %>%
+  filter(country == "Germany") %>%
+  ggplot() +
+  geom_histogram(mapping = aes(x = pm2020), fill = "cornflowerblue", color = "white", alpha = 0.3) +
+  geom_histogram(data = aqli_gadm2_collapse_master %>% filter(country == "Germany"), mapping = aes(x = pm2020), fill = "red", color = "white", alpha = 0.3) 
+
+# in places where there is 0 population at gadm level 2, is there pollution data available in the 2021 file and also in 2020 file. Answer: in 2020 it is available, but in 2021 no, because it probably was available, but went away when population weighting happened.
+
+color_2020 %>%
+  filter(country %in% pop_0_gadm2_regions$country, name_1 %in% pop_0_gadm2_regions$name_1, name_2 %in% pop_0_gadm2_regions$name_2) %>%
+  View()
+
+#> what country is not available in the collapsed gadm0 file, but is available in colormap
+rel_ind <- unique(colormap$NAME_0) %notin% unique(aqli_gadm0_collapse_from_gadm2_with_geom$country)
+unique(colormap$NAME_0)[rel_ind]
+
+# the answer is "Svalbard and Jan Mayen", which comes under the list of regions we expect to be missing, because its outside the thresholds for which pollution data is available.
+
+#> check the dimensions of each year's dataset and also check if all of the above sanity checks hold true in each year's dataset. 
+ 
+#> See if there is a way to process the islands data in a special way, so that their population doesn't end up being 0.
+
+#> plot timeseries/heatmap of last 24 years country wise and compare with old data counterpart heatmaps
+ 
+#> trendlines, country wise compare 2020 v/s 2021 data
+plt0_us <- color_2020 %>%
+  filter(country == "United States") %>%
+  mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         mutate(across(starts_with("pm"), ~.x*pop_weights, .names = "{col}_weighted"))) %>%
+  summarise(across(ends_with("weighted"), sum)) %>%
+  pivot_longer(cols = pm1998_weighted:pm2020_weighted, names_to = "years", 
+               values_to = "pop_weighted_avg_pm2.5") %>%
+  mutate(years = as.integer(unlist(str_extract(years, "\\d+"))), 
+         region = "National Average") %>% 
+  select(years, region, pop_weighted_avg_pm2.5) %>%
+  ggplot() +
+  geom_line(mapping = ggplot2::aes(x = as.integer(years), y = as.double(pop_weighted_avg_pm2.5)), lwd = 1.1, 
+            color = "darkred") +
+  scale_y_continuous(breaks = seq(0, 20, 5), limits = c(0, 20)) +
+  scale_x_continuous(breaks = seq(1998, 2020, 2))  +
+  ggthemes::theme_clean() +
+  labs(x = "Years", 
+       y = expression(paste("Average PM2.5 concentration ( ", mu, "g", "/", m^3, " )")), 
+       title = "PM2.5 Pollution trend 1998 to 2020 (United States)") +
+  theme(legend.position = "bottom", legend.title = element_blank(), 
+        legend.text = element_text(size = 7), 
+        axis.title.y = element_text(size = 9), 
+        axis.title.x = element_text(size = 9), 
+        axis.text.x = element_text(size = 6), 
+        axis.text.y = element_text(size = 6)) 
+  # geom_text(x = 2002.8, y = 8.7, label = expression(paste("WHO PM2.5 Guideline (last updated: 2021): 5 ", mu, "g","/", m^3, "")))
+
+plt_us <- grid.arrange(plt0_us, plt1_us, nrow = 1)
+ 
+#> heatmap continent wise
+
+# read in continent-country mapping file
+country_continent <- read_csv("./experimentation/others/country_continent.csv")
+
+color_2020 <- color_2020 %>%
+  left_join(country_continent, by = c("country"))
+
+aqli_gadm2_collapse_master_continent <-  aqli_gadm2_collapse_master %>%
+  left_join(country_continent, by = c("country"))
+
+
+country_wise_pm2.5_average <- aqli_gadm2_collapse_master_continent  %>%
+  filter(continent == "Africa") %>%
+  group_by(country) %>%
+  mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         mutate(across(starts_with("pm"), ~.x*pop_weights, .names = "{col}_weighted"))) %>%
+  summarise(across(ends_with("weighted"), sum)) %>%
+  pivot_longer(cols = pm1998_weighted:pm2021_weighted, names_to = "years", 
+               values_to = "pop_weighted_avg_pm2.5") %>%
+  mutate(years = as.integer(unlist(str_extract(years, "\\d+"))), 
+         region = "National Average") %>% 
+  arrange(pop_weighted_avg_pm2.5) 
+
+heatmap_africa_2021 <- country_wise_pm2.5_average %>%
+  filter(country %in% c("Democratic Republic of the Congo", 
+                        "Rwanda", 
+                        "Burundi", 
+                        "Cameroon", 
+                        "Uganda", 
+                        "Angola", 
+                        "Benin", 
+                        "Ghana", 
+                        "Gabon",
+                        "Burkina Faso",
+                        "South Africa",
+                        "Egypt", 
+                        "Libya",
+                        "Niger", 
+                        "Mauritius")) %>%
+  mutate(le_lost = (pop_weighted_avg_pm2.5 - 5)*0.098, 
+         le_lost = ifelse(le_lost < 0, 0, le_lost)) %>%
+  ggplot() +
+  geom_raster(mapping = aes(x = years, y = fct_reorder(country, pop_weighted_avg_pm2.5), fill = pop_weighted_avg_pm2.5)) +
+   scale_fill_viridis_b(option = "rocket", direction = -1) +
+  scale_x_continuous(breaks = seq(1998, 2021, 1)) +
+  labs(x = "Years", y = "", fill = "PM2.5 pollution (µg/m³)", caption = str_wrap("*This graph displays the life years lost relative to the WHO PM2.5 guideline in all countries of the African continent (from 1998 to 2021)")) +
+  ggthemes::theme_hc() +
+  theme(axis.text.x = element_text(size = 5), 
+        axis.text.y = element_text(size = 7)) 
+
+heatmap_africa_final <- grid.arrange(heatmap_africa_2020, heatmap_africa_2021, nrow = 1)
+
+#> More sanity checks on the llpp columns calculations
+
+
 ```
+
+
+
+# tmp 
+
+```{r}
+
+```
+
