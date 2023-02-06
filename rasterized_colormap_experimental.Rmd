@@ -1207,7 +1207,7 @@ test <- raster::raster("./experimentation/others/expFeb062023opointo1.tif")
 test2 <- raster::raster("./experimentation/others/expFeb062023opointoo8.tif")
 
 
-#> testing if we can capture one small region at a time (from the unexpected missing) by rasterizing it to 0.001. Starting with sharjah (I rasterized it in QGIS and seeing if it worked)
+#> WORKS (move to main branch: aqli_workflow_vit_share_v1)!!! testing if we can capture one small region at a time (from the unexpected missing) by rasterizing it to 0.001. Starting with sharjah (I rasterized it in QGIS and seeing if it worked)
 
 # writing uae_sharjah polygons as a shapefile
 uae_sharjah <- colormap %>% filter(NAME_0 == "United Arab Emirates", NAME_1 == "Sharjah")
@@ -1256,6 +1256,8 @@ sharjah_brick_df_arrow_summary <- sharjah_brick_df_arrow %>%
   dplyr::summarise(total_population = sum(pop, na.rm = TRUE), 
             avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
   dplyr::rename(objid_gadm2 = objid)
+
+# 
 
 
 
