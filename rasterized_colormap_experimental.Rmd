@@ -1202,6 +1202,63 @@ pop_raw_landscan_crop_pol_masked <- mask(pop_raw_landscan_crop_pol, colormap)
 pol_2018_0.01_test_masked <- mask(pol_2018_0.01_test, colormap)
 
 
+#> checking if rasterizing the shapefile via QGIS makes a difference (answer: very little)
+test <- raster::raster("./experimentation/others/expFeb062023opointo1.tif")
+test2 <- raster::raster("./experimentation/others/expFeb062023opointoo8.tif")
+
+
+#> testing if we can capture one small region at a time (from the unexpected missing) by rasterizing it to 0.001. Starting with sharjah (I rasterized it in QGIS and seeing if it worked)
+
+# writing uae_sharjah polygons as a shapefile
+uae_sharjah <- colormap %>% filter(NAME_0 == "United Arab Emirates", NAME_1 == "Sharjah")
+
+# reading in the QGIS rasterized version of sharjah uae version
+sharjah_uae_rasterized_0.001_qgis <- raster("./experimentation/others/sharjah_uae_0.001.tif")
+
+names(sharjah_uae_rasterized_0.001_qgis) <- "objid"
+
+# crop 2018 raw pollution raster to the extent of the above raster
+pol_2018_0.01_test_sharjah <- crop(pol_2018_0.01_test, extent(sharjah_uae_rasterized_0.001_qgis))
+
+# match resolution of sharjah pollution raster with the 0.001 rasterized shape file
+pol_2018_test_sharjah_0.001 <- foster::matchResolution(pol_2018_0.01_test_sharjah, sharjah_uae_rasterized_0.001_qgis)
+
+names(pol_2018_test_sharjah_0.001) <- "pol"
+
+# crop population raw data to sharjah
+pop_raw_landscan_test_sharjah <- crop(pop_raw_landscan, extent(sharjah_uae_rasterized_0.001_qgis))
+
+# match resolution of the sharjah population raster with 0.001 shapefile
+pop_raw_landscan_test_sharjah_0.001 <- foster::matchResolution(pop_raw_landscan_test_sharjah, 
+                                                               sharjah_uae_rasterized_0.001_qgis)
+names(pop_raw_landscan_test_sharjah_0.001) <- "pop"
+
+# create a brick
+sharjah_brick <- sharjah_uae_rasterized_0.001_qgis %>%
+  addLayer(pol_2018_test_sharjah_0.001) %>%
+  addLayer(pop_raw_landscan_test_sharjah_0.001)
+
+# sharjah brick df
+sharjah_brick_df <- sharjah_brick %>%
+  raster::as.data.frame()
+
+# convert dataframe into an arrow table
+sharjah_brick_df_arrow <- sharjah_brick_df %>%
+  arrow::as_arrow_table()
+
+# summarizing and finally testing
+sharjah_brick_df_arrow_summary <- sharjah_brick_df_arrow %>%
+  dplyr::filter((!is.na(objid)) & ((as.character(objid) != "NA"))) %>%
+  dplyr::group_by(objid) %>%
+  dplyr::collect() %>%
+  dplyr::mutate(pop_weights = pop/sum(pop, na.rm = TRUE), 
+         pollution_pop_weighted = pop_weights*pol) %>%
+  dplyr::summarise(total_population = sum(pop, na.rm = TRUE), 
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
+  dplyr::rename(objid_gadm2 = objid)
+
+
+
 ```
 
 
@@ -1217,6 +1274,8 @@ color_2020 %>%
 color_2020 %>%
   filter(country == "India", name_1 == "Uttar Pradesh") %>% 
   write_csv("C:/Users/Aarsh/Desktop/others/aqli_2020_data/uttarpradesh_aqli_2020.csv")
+
+
 
 
 ```
