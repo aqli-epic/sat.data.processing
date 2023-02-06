@@ -1004,6 +1004,204 @@ heatmap_africa_final <- grid.arrange(heatmap_africa_2020, heatmap_africa_2021, n
 #> More sanity checks on the llpp columns calculations
 
 
+#> Checking the areas of the missing shapefile polygons and checking if the area is smaller than a 0.008 degree lat x 0.008 degree long pixel.
+
+# area calculations example
+c_russia <- colormap %>% filter(NAME_0 == "Russia")
+c_russia <- st_transform(c_russia, 4326)
+c_russia <- c_russia %>% st_make_valid()
+c_russia$area <- st_area(c_russia)/(10^6)
+
+# read in 2021 processed aqli gadm2 data
+aqli_2021_gadm2_test <- read_csv("./ar.2023.update.using.2021.pol.data/data/output_vit/gadm2_aqli2021.csv")
+
+# get indices for missing areas
+missing_ids_index <- colormap$objectid %notin% aqli_2021_gadm2_test$objectid_gadm2
+
+# missing areas
+missing_areas <- colormap[missing_ids_index, ]
+
+# calculating areas for missing areas and filetering areas whose area is less than or equal to  a threshold
+missing_areas <- st_transform(missing_areas, 4326)
+missing_areas <- st_make_valid(missing_areas)
+
+missing_areas$area <- as.numeric(st_area(missing_areas)/(10^6))
+
+missing_areas_drop_geom <- missing_areas %>%
+  mutate(area_sans_units = as.numeric(area)) 
+  st_drop_geometry()
+
+missing_areas_drop_geom %>%
+  slice_max(area_sans_units, n = 10) 
+
+# regions that we expect to be missing and filtering them out of the above list
+missing_regions_exp_to_be_missing <- readxl::read_xlsx("C:/Users/Aarsh/Desktop/others/part-1_expectToBeMissing.xlsx")
+
+missing_regions_dont_expect_missing <- missing_areas_drop_geom %>%
+  filter(NAME_0 %notin% missing_regions_exp_to_be_missing$NAME_0 & 
+        NAME_1 %notin% missing_regions_exp_to_be_missing$NAME_1 &
+        NAME_2 %notin% missing_regions_exp_to_be_missing$NAME_2)
+
+#> separately fixing nat standard NA issue and 0 population regions issue and exporting files to be sent out to ViT (later on add these steps to the main codebase, if it makes sense)
+
+# read in files: gadm2 and wherever natstandard = 0, replace it with NA
+aqli_2021_data_gadm2 <- readr::read_csv("./experimentation/AQLI_2021_data_share_internally_1/AQLI_2021_data_share_internally/gadm2_aqli2021.csv")  
+
+aqli_2021_data_gadm2 <- aqli_2021_data_gadm2 %>%
+  mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) 
+
+
+# read in files: gadm1 and wherever natstandard = 0, replace it with NA
+aqli_2021_data_gadm1 <- readr::read_csv("./experimentation/AQLI_2021_data_share_internally_1/AQLI_2021_data_share_internally/gadm1_aqli2021.csv")
+
+aqli_2021_data_gadm1 <- aqli_2021_data_gadm1 %>%
+  mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) 
+
+# read in files: gadm0 and wherever natstandard = 0, replace it with NA
+aqli_2021_data_gadm0 <- readr::read_csv("./experimentation/AQLI_2021_data_share_internally_1/AQLI_2021_data_share_internally/gadm0_aqli2021.csv")
+
+aqli_2021_data_gadm0 <- aqli_2021_data_gadm0 %>%
+  mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) 
+
+#### prepping gadm2 ViT version
+
+# gadm2 replace all 0's with NAs in rows where population = 0
+gadm2_missing_pop <- aqli_2021_data_gadm2 %>%
+  filter(population == 0)
+
+# replace all 0's with NAs
+gadm2_missing_pop[gadm2_missing_pop == 0] <- NA
+
+# place this back in the original gadm2 data frame
+aqli_2021_data_gadm2_vit_ready <- aqli_2021_data_gadm2 %>% 
+  dplyr::filter(population != 0) %>%
+  dplyr::bind_rows(gadm2_missing_pop) %>%
+  dplyr::arrange(objectid_gadm2)
+
+#### prepping gadm1 ViT version
+
+# gadm1 replace all 0's with NAs in rows where population = 0
+gadm1_missing_pop <- aqli_2021_data_gadm1 %>%
+  filter(population == 0)
+
+# replace all 0's with NAs
+gadm1_missing_pop[gadm1_missing_pop == 0] <- NA
+
+# place this back in the original gadm2 data frame
+aqli_2021_data_gadm1_vit_ready <- aqli_2021_data_gadm1 %>% 
+  dplyr::filter(population != 0) %>%
+  dplyr::bind_rows(gadm1_missing_pop) %>%
+  dplyr::arrange(objectid_gadm1)
+
+
+#### prepping gadm0 ViT version
+
+# gadm0 replace all 0's with NAs in rows where population = 0
+gadm0_missing_pop <- aqli_2021_data_gadm0 %>%
+  filter(population == 0)
+
+# replace all 0's with NAs
+gadm0_missing_pop[gadm0_missing_pop == 0] <- NA
+
+# place this back in the original gadm2 data frame
+aqli_2021_data_gadm0_vit_ready <- aqli_2021_data_gadm0 %>% 
+  dplyr::filter(population != 0) %>%
+  dplyr::bind_rows(gadm0_missing_pop) %>%
+  dplyr::arrange(objectid_gadm0)
+
+# export final datasets
+aqli_2021_data_gadm2_vit_ready %>%
+  write_csv("./experimentation/AQLI_2021_data_share_internally_1/AQLI_2021_data_share_internally/main_4_files/gadm2_aqli2021_vit.csv")
+
+aqli_2021_data_gadm1_vit_ready %>%
+  write_csv("./experimentation/AQLI_2021_data_share_internally_1/AQLI_2021_data_share_internally/main_4_files/gadm1_aqli2021_vit.csv")
+
+aqli_2021_data_gadm0_vit_ready %>%
+  write_csv("./experimentation/AQLI_2021_data_share_internally_1/AQLI_2021_data_share_internally/main_4_files/gadm0_aqli2021_vit.csv")
+
+
+# one big picture sanity check (plotting the gadm2 vit ready file)
+
+aqli_2021_data_gadm2_vit_ready_shp <- aqli_2021_data_gadm2 %>%
+  dplyr::left_join(colormap %>% rename(objectid_gadm2 = objectid), by = "objectid_gadm2") %>%
+  dplyr::rename(iso_alpha3 = iso_alpha3.x) %>%
+  dplyr::select(-c(iso_alpha3.y, NAME_0, NAME_1, NAME_2))
+
+
+aqli_2021_data_gadm2_vit_ready_shp_final <- aqli_2021_data_gadm2_vit_ready_shp %>%
+  mutate(lyl_aqli_bucket = ifelse((llpp_who_2021 >= 0) & (llpp_who_2021 < 0.1), "0 - < 0.1 years", NA), 
+         lyl_aqli_bucket = ifelse((llpp_who_2021 >= 0.1) & (llpp_who_2021 < 0.5), "0.1 - < 0.5", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llpp_who_2021 >= 0.5) & (llpp_who_2021 < 1), "0.5 - < 1", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llpp_who_2021 >= 1) & (llpp_who_2021 < 2), "1 - < 2", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llpp_who_2021 >= 2) & (llpp_who_2021 < 3), "2 - < 3", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llpp_who_2021 >= 3) & (llpp_who_2021 < 4), "3 - < 4", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llpp_who_2021 >= 4) & (llpp_who_2021 < 5), "4 - < 5", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llpp_who_2021 >= 5) & (llpp_who_2021 < 6), "5 - < 6", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((llpp_who_2021 >= 6), ">= 6 years", lyl_aqli_bucket)) %>%
+  mutate(order_var = ifelse(lyl_aqli_bucket == "0 - < 0.1 years", 1, NA), 
+         order_var = ifelse(lyl_aqli_bucket == "0.1 - < 0.5", 2, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "0.5 - < 1", 3, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "1 - < 2", 4, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "2 - < 3", 5, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "3 - < 4", 6, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "4 - < 5", 7, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == "5 - < 6", 8, order_var), 
+         order_var = ifelse(lyl_aqli_bucket == ">= 6 years", 9, order_var)) 
+
+# map1
+plt <- aqli_2021_data_gadm2_vit_ready_shp_final %>%
+  select(-geometry, geometry) %>%
+  st_as_sf() %>%
+
+      ggplot() +
+  geom_sf(mapping = aes(fill = lyl_aqli_bucket), color = "transparent") +
+  scale_fill_manual(values = c("0 - < 0.1 years" = "#FFFFFF", "0.1 - < 0.5" = "#FFE6B3", "0.5 - < 1" = "#FFD25D", 
+                                "1 - < 2" = "#FFBA00", "2 - < 3" = "#FF9600", "3 - < 4" = "#FF6908", 
+                                "4 - < 5" = "#E63D23", "5 - < 6" = "#BD251C", ">= 6 years" = "#8C130E")) +
+  ggthemes::theme_map() +
+  labs(fill = "Gain in years of Life Expectancy", title = "AQLI 2021 data: Life years lost") +
+  theme(legend.position = "bottom", 
+        plot.title = element_text(size = 15, hjust = 0.5), 
+        legend.justification = c(0.5, 3), 
+        plot.background = element_rect(fill = "aliceblue")) +
+    guides(fill = guide_legend(nrow = 1)) 
+
+ggsave(filename = "./experimentation/test_aqli_global_2021_map_feb022023.pdf", plot = plt, height = 14, width = 14)
+
+#> filtering the raster using the missing pollution data regions, and trying to convert that to 0.001
+
+# move geometry column to the end and st_as_sf() the crap out of the missing_regions_dont_expect_missing object
+missing_regions_dont_expect_missing <- missing_regions_dont_expect_missing %>%
+        select(-geometry, geometry) %>% 
+  st_as_sf()
+
+# crop the population raster to the missing regions
+clip_pop_raster_missing_regions <- pop_raw_landscan_crop_pol %>%
+  crop(missing_regions_dont_expect_missing)
+
+# mask the missing regions cropped population raster
+mask_clip_pop_raster_missing_regions <- mask(clip_pop_raster_missing_regions, 
+                                             missing_regions_dont_expect_missing)
+
+# match the resolution of the pollution data to the population data
+pol_2018_0.01_test_pop_res <- foster::matchResolution(pol_2018_0.01_test, mask_clip_pop_raster_missing_regions)
+
+# crop the pollution data to the missing regions # 1 minute
+clip_pol2018_missing_regions_shp <- pol_2018_0.01_test %>% 
+  crop(missing_regions_dont_expect_missing)
+
+# mask the raster # 3 minutes
+masked_clip_pol2018_missing_regions_shp <- mask(clip_pol2018_missing_regions_shp, missing_regions_dont_expect_missing)
+
+# resample 0.01 pollution data to 0.001
+pol_2018_0.01_test_resamp_0.001 <- resample(pol_2018_0.01_test, )
+
+#> trying something different
+
+pop_raw_landscan_crop_pol_masked <- mask(pop_raw_landscan_crop_pol, colormap)
+pol_2018_0.01_test_masked <- mask(pol_2018_0.01_test, colormap)
+
+
 ```
 
 
@@ -1011,6 +1209,15 @@ heatmap_africa_final <- grid.arrange(heatmap_africa_2020, heatmap_africa_2021, n
 # tmp 
 
 ```{r}
+color_2020 <- read_csv("C:/Users/Aarsh/Desktop/others/aqli_2020_data/color_2020.csv")
+color_2020 %>%
+  filter(country == "India") %>% 
+  write_csv("C:/Users/Aarsh/Desktop/others/aqli_2020_data/india_aqli_2020.csv")
+
+color_2020 %>%
+  filter(country == "India", name_1 == "Uttar Pradesh") %>% 
+  write_csv("C:/Users/Aarsh/Desktop/others/aqli_2020_data/uttarpradesh_aqli_2020.csv")
+
 
 ```
 
