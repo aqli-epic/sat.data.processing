@@ -633,6 +633,33 @@ end_time_vit_data_pipeline <- Sys.time()
 print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " minutes?"))
 ```
 
+
+
+#> Capturing the missing pollution regions and the NA population regions that were left out in the process above because there tiny size.---------------------------------------
+
+#Specifically, in the AQLI 2023 update, there were 153 missing pollution regions, of which 70 were expected to be missing because they were either below 54.995 S or above 67.995 N. Remaining 83 regions were probably extremely small in size (there area being less than the higest available resolution, i.e. 0.01 degree^2, which is ~1km^2), such that when the shapefile was rasterized, these region polygons were so small that no pixel's center lay in them post rasterizing and hence they did not show up in the final list. The rasterizing algorithm works by assigning the pixel in the rasterized version the unique id of the underlying polygon it belongs to, but for that it uses pixel's center to see which underlying polygon that pixel belongs to. To resolve this, for these 153 missing regions we will be rasterizing the shapefile to a resolution of 0.001 degree^2, so that we can capture them. In doing so, it's important to know that interpolating population to higher resoltions doesn't work, so instead we have to interpolate population densities.
+
+# Apart from this there were 97 regions that were captured in the rasterization process, but there population was 0/NA. A similar process would be applied to them.
+
+# Hopefully, once this process is complete all of the regions would be captured. If not, you can try resampling to an even higher resolution, e.g. 0.0001 (10mx10m). But, that would be extremely memory intensive.
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Sanity checks area (deactivated for now)
 ```{r sanity_checks, eval=FALSE, include=FALSE}
 #> sanity checks time-------------------------------------------------------------
