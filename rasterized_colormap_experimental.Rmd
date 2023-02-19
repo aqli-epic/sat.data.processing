@@ -633,6 +633,7 @@ end_time_vit_data_pipeline <- Sys.time()
 print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " minutes?"))
 ```
 
+
 # Sanity checks area (deactivated for now)
 ```{r sanity_checks, eval=FALSE, include=FALSE}
 #> sanity checks time-------------------------------------------------------------
@@ -1119,6 +1120,8 @@ aqli_2021_data_gadm1_vit_ready %>%
 aqli_2021_data_gadm0_vit_ready %>%
   write_csv("./experimentation/AQLI_2021_data_share_internally_1/AQLI_2021_data_share_internally/main_4_files/gadm0_aqli2021_vit.csv")
 
+# read in the AQLI 2021 dataset at gadm level 2
+aqli_2021_data_gadm2 <- read_csv("./experimentation/AQLI_2021_data_share_internally_1/AQLI_2021_data_share_internally/vit_files_share_feb2023/gadm2_aqli2021_vit.csv")
 
 # one big picture sanity check (plotting the gadm2 vit ready file)
 
@@ -1127,7 +1130,7 @@ aqli_2021_data_gadm2_vit_ready_shp <- aqli_2021_data_gadm2 %>%
   dplyr::rename(iso_alpha3 = iso_alpha3.x) %>%
   dplyr::select(-c(iso_alpha3.y, NAME_0, NAME_1, NAME_2))
 
-
+# adding lyl buckets to create a lyl map
 aqli_2021_data_gadm2_vit_ready_shp_final <- aqli_2021_data_gadm2_vit_ready_shp %>%
   mutate(lyl_aqli_bucket = ifelse((llpp_who_2021 >= 0) & (llpp_who_2021 < 0.1), "0 - < 0.1 years", NA), 
          lyl_aqli_bucket = ifelse((llpp_who_2021 >= 0.1) & (llpp_who_2021 < 0.5), "0.1 - < 0.5", lyl_aqli_bucket), 
@@ -1148,7 +1151,29 @@ aqli_2021_data_gadm2_vit_ready_shp_final <- aqli_2021_data_gadm2_vit_ready_shp %
          order_var = ifelse(lyl_aqli_bucket == "5 - < 6", 8, order_var), 
          order_var = ifelse(lyl_aqli_bucket == ">= 6 years", 9, order_var)) 
 
-# map1
+# create a pollution version of this map with AQLI colors
+aqli_2021_data_gadm2_vit_ready_shp_final_pol_view <- aqli_2021_data_gadm2_vit_ready_shp %>%
+  mutate(pol_bucket = ifelse((pm2021 >= 0) & (pm2021 < 5), "0 - < 5 µg/m³", NA), 
+         pol_bucket = ifelse((pm2021 >= 5) & (pm2021 < 10), "5 - < 10", pol_bucket), 
+         pol_bucket = ifelse((pm2021 >= 10) & (pm2021 < 20), "10 - < 20", pol_bucket), 
+         pol_bucket = ifelse((pm2021 >= 20) & (pm2021 < 30), "20 - < 30", pol_bucket), 
+         pol_bucket = ifelse((pm2021 >= 30) & (pm2021 < 40), "30 - < 40", pol_bucket), 
+         pol_bucket = ifelse((pm2021 >= 40) & (pm2021 < 50), "40 - < 50", pol_bucket), 
+         pol_bucket = ifelse((pm2021 >= 50) & (pm2021 < 60), "50 - < 60", pol_bucket), 
+         pol_bucket = ifelse((pm2021 >= 60) & (pm2021 < 70), "60 - < 70", pol_bucket), 
+         pol_bucket = ifelse((pm2021 >= 70), ">= 70 µg/m³", pol_bucket)) %>%
+  mutate(order_var = ifelse(pol_bucket == "0 - < 5 µg/m³", 1, NA), 
+         order_var = ifelse(pol_bucket == "5 - < 10", 2, order_var), 
+         order_var = ifelse(pol_bucket == "10 - < 20", 3, order_var), 
+         order_var = ifelse(pol_bucket == "20 - < 30", 4, order_var), 
+         order_var = ifelse(pol_bucket == "30 - < 40", 5, order_var), 
+         order_var = ifelse(pol_bucket == "40 - < 50", 6, order_var), 
+         order_var = ifelse(pol_bucket == "50 - < 60", 7, order_var), 
+         order_var = ifelse(pol_bucket == "60 - < 70", 8, order_var), 
+         order_var = ifelse(pol_bucket == ">= 70 µg/m³", 9, order_var))
+
+
+# map1 (lyl view)
 plt <- aqli_2021_data_gadm2_vit_ready_shp_final %>%
   select(-geometry, geometry) %>%
   st_as_sf() %>%
@@ -1166,7 +1191,25 @@ plt <- aqli_2021_data_gadm2_vit_ready_shp_final %>%
         plot.background = element_rect(fill = "aliceblue")) +
     guides(fill = guide_legend(nrow = 1)) 
 
-ggsave(filename = "./experimentation/test_aqli_global_2021_map_feb022023.pdf", plot = plt, height = 14, width = 14)
+# map1 (pol 2021 view)
+plt_pol_view <- aqli_2021_data_gadm2_vit_ready_shp_final_pol_view %>%
+  select(-geometry, geometry) %>%
+  st_as_sf() %>%
+      ggplot() +
+  geom_sf(mapping = aes(fill = pol_bucket), color = "transparent") +
+  scale_fill_manual(values = c("0 - < 5 µg/m³" = "#FFFFFF", "5 - < 10" = "#CBE8F3", "10 - < 20" = "#B4CDD9", 
+                                "20 - < 30" = "#8FA1AD", "30 - < 40" = "#707F8C", "40 - < 50" = "#576572", 
+                                "50 - < 60" = "#414F5D", "60 - < 70" = "#2A3947", ">= 70 µg/m³" = "#1C2B39")) +
+  ggthemes::theme_map() +
+  labs(fill = "PM2.5", title = "AQLI 2021 PM2.5 pollution plot") +
+  theme(legend.position = "bottom", 
+        plot.title = element_text(size = 15, hjust = 0.5), 
+        legend.justification = c(0.5, 3), 
+        plot.background = element_rect(fill = "aliceblue"), 
+        legend.key = element_rect(color = "black")) +
+    guides(fill = guide_legend(nrow = 1))
+
+ggsave(filename = "./experimentation/test_aqli_global_2021_map_feb072023_polviewinpolcolors.pdf", plot = plt_pol_view, height = 14, width = 14)
 
 #> filtering the raster using the missing pollution data regions, and trying to convert that to 0.001
 
@@ -1215,28 +1258,45 @@ uae_sharjah <- colormap %>% filter(NAME_0 == "United Arab Emirates", NAME_1 == "
 # reading in the QGIS rasterized version of sharjah uae version
 sharjah_uae_rasterized_0.001_qgis <- raster("./experimentation/others/sharjah_uae_0.001.tif")
 
+crs(sharjah_uae_rasterized_0.001_qgis) <- "+proj=longlat +datum=WGS84 +no_defs"
+
 names(sharjah_uae_rasterized_0.001_qgis) <- "objid"
 
 # crop 2018 raw pollution raster to the extent of the above raster
 pol_2018_0.01_test_sharjah <- crop(pol_2018_0.01_test, extent(sharjah_uae_rasterized_0.001_qgis))
 
+crs(pol_2018_0.01_test_sharjah) <- "+proj=longlat +datum=WGS84 +no_defs"
+
 # match resolution of sharjah pollution raster with the 0.001 rasterized shape file
-pol_2018_test_sharjah_0.001 <- foster::matchResolution(pol_2018_0.01_test_sharjah, sharjah_uae_rasterized_0.001_qgis)
+pol_2018_test_sharjah_0.001 <- raster::resample(pol_2018_0.01_test_sharjah, sharjah_uae_rasterized_0.001_qgis, method = "ngb")
 
 names(pol_2018_test_sharjah_0.001) <- "pol"
+
+# mask pol_2018_0.01_test_shajrah to the qgis raster
+pol_2018_sharjah_0.001_test_masked <- raster::mask(pol_2018_test_sharjah_0.001, sharjah_uae_rasterized_0.001_qgis)
+
+names(pol_2018_sharjah_0.001_test_masked) <- "pol"
+
 
 # crop population raw data to sharjah
 pop_raw_landscan_test_sharjah <- crop(pop_raw_landscan, extent(sharjah_uae_rasterized_0.001_qgis))
 
+crs(pop_raw_landscan_test_sharjah) <- "+proj=longlat +datum=WGS84 +no_defs"
+
 # match resolution of the sharjah population raster with 0.001 shapefile
-pop_raw_landscan_test_sharjah_0.001 <- foster::matchResolution(pop_raw_landscan_test_sharjah, 
-                                                               sharjah_uae_rasterized_0.001_qgis)
+pop_raw_landscan_test_sharjah_0.001 <- raster::resample(pop_raw_landscan_test_sharjah, sharjah_uae_rasterized_0.001_qgis, method = "ngb")
+  
 names(pop_raw_landscan_test_sharjah_0.001) <- "pop"
+
+# mask population raw data to sharjah
+pop_raw_landscan_test_sharjah_0.001_masked <- raster::mask(pop_raw_landscan_test_sharjah_0.001, 
+                                                           sharjah_uae_rasterized_0.001_qgis)
+names(pop_raw_landscan_test_sharjah_0.001_masked) <- "pop"
 
 # create a brick
 sharjah_brick <- sharjah_uae_rasterized_0.001_qgis %>%
-  addLayer(pol_2018_test_sharjah_0.001) %>%
-  addLayer(pop_raw_landscan_test_sharjah_0.001)
+  addLayer(pol_2018_sharjah_0.001_test_masked) %>%
+  addLayer(pop_raw_landscan_test_sharjah_0.001_masked)
 
 # sharjah brick df
 sharjah_brick_df <- sharjah_brick %>%
@@ -1257,7 +1317,176 @@ sharjah_brick_df_arrow_summary <- sharjah_brick_df_arrow %>%
             avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
   dplyr::rename(objid_gadm2 = objid)
 
-# 
+# joining with the colormap to get area names
+sharjah_brick_df_arrow_summary_shp <- sharjah_brick_df_arrow_summary %>%
+  left_join(colormap, by = c("objid_gadm2" = "objectid"))
+
+#> doing a similar test for Australia's regions where a population is not available (for Australia's Coral Sea Islands)
+
+# na population regions
+aqli_2021_data_gadm2_pop_na <- aqli_2021_data_gadm2 %>%
+  filter(is.na(population))
+
+# read in australia raster
+bouvetisland_raster <- raster::raster("./experimentation/others/bouvetislandraster.tif")
+names(bouvetisland_raster) <- "objid"
+
+# crop 2018 raw pollution raster to the extent of the above raster
+pol_2018_0.01_test_bouvetisland <- crop(pol_2018_0.01_test, extent(bouvetisland_raster))
+
+crs(pol_2018_0.01_test_bouvetisland) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+# match resolution of bouvetisland pollution raster with the 0.001 rasterized shape file
+pol_2018_test_bouvetisland_0.001 <- raster::resample(pol_2018_0.01_test_bouvetisland, bouvetisland_raster, method = "ngb")
+
+names(pol_2018_0.01_test_bouvetisland) <- "pol"
+
+# mask pol_2018_0.01_test_shajrah to the qgis raster
+pol_2018_bouvetisland_0.001_test_masked <- raster::mask(pol_2018_test_bouvetisland_0.001, bouvetisland_raster)
+
+names(pol_2018_bouvetisland_0.001_test_masked) <- "pol"
+
+# crop population raw data to bouvetisland
+pop_raw_landscan_test_bouvetisland <- crop(pop_raw_landscan, extent(bouvetisland_raster))
+
+crs(pop_raw_landscan_test_bouvetisland) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+# match resolution of the sharjah population raster with 0.001 shapefile
+pop_raw_landscan_test_bouvetisland_0.001 <- raster::resample(pop_raw_landscan_test_bouvetisland, bouvetisland_raster, method = "ngb")
+  
+names(pop_raw_landscan_test_bouvetisland_0.001) <- "pop"
+
+# mask population raw data to sharjah
+pop_raw_landscan_test_bouvetisland_0.001_masked <- raster::mask(pop_raw_landscan_test_bouvetisland_0.001, 
+                                                           bouvetisland_raster)
+# create a brick
+bouvetisland_brick <- bouvetisland_raster %>%
+  addLayer(pol_2018_bouvetisland_0.001_test_masked) %>%
+  addLayer(pop_raw_landscan_test_bouvetisland_0.001_masked)
+
+# sharjah brick df
+bouvetisland_df <- bouvetisland_brick %>%
+  raster::as.data.frame()
+
+# convert dataframe into an arrow table
+bouvetisland_brick_df_arrow <- bouvetisland_df %>%
+  arrow::as_arrow_table()
+
+# summarizing and finally testing
+bouvetisland_brick_df_arrow_summary <- bouvetisland_brick_df_arrow %>%
+  dplyr::filter((!is.na(objid)) & ((as.character(objid) != "NA"))) %>%
+  dplyr::group_by(objid) %>%
+  dplyr::collect() %>%
+  dplyr::mutate(pop_weights = pop/sum(pop, na.rm = TRUE), 
+         pollution_pop_weighted = pop_weights*pol) %>%
+  dplyr::summarise(total_population = sum(pop, na.rm = TRUE), 
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
+  dplyr::rename(objid_gadm2 = objid)
+
+# joining with the colormap to get area names
+bouvetisland_brick_df_arrow_summary_shp <- bouvetisland_brick_df_arrow_summary %>%
+  left_join(colormap, by = c("objid_gadm2" = "objectid"))
+
+#> writing a function that would abstract away from these details
+regional_summary <- function(pol_raw_raster, pop_raw_raster, region_rasterized_shapefile){
+  
+  # set the name of the regional rasterized shapefile
+  names(region_rasterized_shapefile) <- "objid"
+  
+  # crop 2018 raw pollution raster to the extent of the above raster
+ pol_raster_cropped <- crop(pol_raw_raster, extent(region_rasterized_shapefile))
+
+ # set crs of the pollution raster
+crs(pol_raster_cropped) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+# match resolution of pollution raster with the rasterized regionshape file
+pol_raster_cropped_new_res <- raster::resample(pol_raster_cropped, region_rasterized_shapefile, method = "ngb")
+
+names(pol_raster_cropped_new_res) <- "pol"
+
+# mask pol_2018_0.01_test_shajrah to the qgis raster
+pol_raster_cropped_new_res_masked <- raster::mask(pol_raster_cropped_new_res, region_rasterized_shapefile)
+
+# set the name of the pollution raster
+names(pol_raster_cropped_new_res_masked) <- "pol"
+
+# crop population raw data to region rasterized shapefile
+pop_raster_cropped <- crop(pop_raw_raster, extent(region_rasterized_shapefile))
+
+crs(pop_raster_cropped) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+# replacing the population with population densities
+# raster::values(pop_raster_cropped) <- as.vector(pop_raster_cropped * (0.01/0.855625)) 
+raster::values(pop_raster_cropped) <- as.vector(pop_raster_cropped * 0.01440115)
+
+# performing idw on population densities
+
+#match resolution of the pop_raster_cropped population raster with region_rasterized_shapefile
+pop_raster_cropped_new_res <- raster::resample(pop_raster_cropped, region_rasterized_shapefile, method = "ngb")
+  
+
+# mask population raw data to sharjah
+pop_raster_cropped_new_res_masked <- raster::mask(pop_raster_cropped_new_res, 
+                                                          region_rasterized_shapefile)
+
+# pop_raster_cropped_new_res
+names(pop_raster_cropped_new_res_masked) <- "pop"
+
+# create a brick
+region_brick <- region_rasterized_shapefile %>%
+  addLayer(pol_raster_cropped_new_res_masked) %>%
+  addLayer(pop_raster_cropped_new_res_masked)
+
+# sharjah brick df
+region_brick_df <- region_brick %>%
+  raster::as.data.frame()
+
+# convert dataframe into an arrow table
+region_brick_df_arrow <- region_brick_df %>%
+  arrow::as_arrow_table()
+
+# summarizing and finally testing
+region_brick_df_arrow_summary <- region_brick_df_arrow %>%
+  dplyr::filter((!is.na(objid)) & ((as.character(objid) != "NA"))) %>%
+  dplyr::group_by(objid) %>%
+  dplyr::collect() %>%
+  dplyr::mutate(pop_weights = pop/sum(pop, na.rm = TRUE), 
+         pollution_pop_weighted = pop_weights*pol) %>%
+  dplyr::summarise(total_population = sum(pop, na.rm = TRUE), 
+            avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
+  dplyr::rename(objid_gadm2 = objid)
+
+# joining with the colormap to get area names
+region_brick_df_arrow_summary_shp <- region_brick_df_arrow_summary %>%
+  left_join(colormap, by = c("objid_gadm2" = "objectid"))
+
+return(region_brick_df_arrow_summary_shp)
+  
+}
+
+colormap %>% 
+  filter(NAME_0 == "Australia", 
+         NAME_1 == "Queensland", 
+         NAME_2 == "Wujal Wujal") %>%
+  st_write("./experimentation/others/wujalwujal.shp")
+
+region_rasterized_shapefile <- raster::raster("./experimentation/others/gujarat_tif.tif")
+
+
+# rasterizing a subset of the colormap shapefile to 0.001 using fasterize: test (Gujarat): Works
+gujarat_raster_r_0.001_test <- fasterize(colormap %>% filter(NAME_0 == "India", NAME_1 == "Gujarat"), raster::raster(ext = raster::extent(colormap %>% filter(NAME_0 == "India", NAME_1 == "Gujarat")), resolution = 0.001, crs = crs(colormap)), field = "objectid", fun = "last")
+
+# rasterizing a subset of the colormap shapefile to 0.001 using fasterize: test (Illinois): Works
+illinois_raster_r_0.001_test <- fasterize(colormap %>% filter(NAME_0 == "United States", NAME_1 == "Illinois"), raster::raster(ext = raster::extent(colormap %>% filter(NAME_0 == "United States", NAME_1 == "Illinois")), resolution = 0.001, crs = crs(colormap)), field = "objectid", fun = "last")
+
+# rasterizing a subset of the colormap shapefile to 0.001 using fasterize": test (Wujal Wujal)
+wujalwujal_raster_r_0.001_test <- fasterize(colormap %>% filter(NAME_0 == "Australia", NAME_2 == "Wujal Wujal"), raster::raster(ext = raster::extent(colormap %>% filter(NAME_0 == "Australia", NAME_2 == "Wujal Wujal")), resolution = 0.001, crs = crs(colormap)), field = "objectid", fun = "last")
+
+# test
+foo <- regional_summary(pol_2018_0.01_test, pop_raw_landscan, region_rasterized_shapefile)
+foo1 <- regional_summary(pol_2018_0.01_test, pop_raw_landscan, gujarat_raster_r_0.001_test)
+foo2 <- regional_summary(pol_2018_0.01_test, pop_raw_landscan, wujalwujal_raster_r_0.001_test)
+foo3 <- regional_summary(pol_2018_0.01_test, pop_raw_landscan, illinois_raster_r_0.001_test)
 
 
 
@@ -1268,17 +1497,6 @@ sharjah_brick_df_arrow_summary <- sharjah_brick_df_arrow %>%
 # tmp 
 
 ```{r}
-color_2020 <- read_csv("C:/Users/Aarsh/Desktop/others/aqli_2020_data/color_2020.csv")
-color_2020 %>%
-  filter(country == "India") %>% 
-  write_csv("C:/Users/Aarsh/Desktop/others/aqli_2020_data/india_aqli_2020.csv")
-
-color_2020 %>%
-  filter(country == "India", name_1 == "Uttar Pradesh") %>% 
-  write_csv("C:/Users/Aarsh/Desktop/others/aqli_2020_data/uttarpradesh_aqli_2020.csv")
-
-
-
 
 ```
 
