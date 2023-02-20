@@ -4,7 +4,7 @@
 # and then map pollution and population data onto it, to finally output a gadm level 2 file that would
 # contain the population, pollution data for that region.
 
-regional_summary <- function(colormap, pol_data_location, pop_raw_raster, resolution_deg, objectid_vec, pol_data_start_year){
+regional_summary <- function(colormap, pol_data_location, pop_raw_raster, resample_to_res, objectid_vec, pol_data_start_year, pop_raster_res){
 
   # pol data list
   pol_data_list <- list.files(pol_data_location) %>% sort()
@@ -12,24 +12,30 @@ regional_summary <- function(colormap, pol_data_location, pop_raw_raster, resolu
   # pollution column names empty vector
   pol_col_name_vec <- c()
 
-  # lists of each region list
-  master_list <- list()
+  # region years list
+  region_years_list <- list()
+
+  # master region years list
+  master_region_years_list <- list()
 
   for(i in 1: length(objectid_vec)){
     # rasterizing a subset of the colormap shapefile to a reference resolution using fasterize: test (Gujarat): Works
     region_rasterized_shapefile <- fasterize(colormap %>% filter(objectid == objectid_vec[i]),
                                              raster::raster(ext = raster::extent(colormap %>% filter(objectid == objectid_vec[i])),
-                                                            resolution = resolution_deg, crs = crs(colormap)), field = "objectid", fun = "last")
+                                                            resolution = resample_to_res, crs = crs(colormap)), field = "objectid", fun = "last")
     # set the name of the regional rasterized shapefile
     names(region_rasterized_shapefile) <- "objid"
 
     for(j in 1:length(pol_data_list)){
 
       # ui
-      print(stringr::str_c("Region number" , i, ": Iteration #", j, "/", (update_year - pol_data_start_year) + 1, " begins"))
+      print(stringr::str_c("Region number " , i, ": Iteration #", j, "/", (update_year - pol_data_start_year) + 1, " begins"))
 
       # filling in the name of the current pollution year
       pol_col_name_vec[j] <- str_c("pm", (pol_data_start_year + (j-1)))
+
+      # storing a separate copy of the current pollution year in a separate object, for later use in the rename command
+      cur_pol_col_name <- pol_col_name_vec[j]
 
       # pollution file name given the current iteration
       cur_pol_file_name <- pol_data_list[j]
@@ -63,8 +69,7 @@ regional_summary <- function(colormap, pol_data_location, pop_raw_raster, resolu
       crs(pop_raster_cropped) <- "+proj=longlat +datum=WGS84 +no_defs"
 
       # replacing the population with population densities
-      # raster::values(pop_raster_cropped) <- as.vector(pop_raster_cropped * (0.01/0.855625))
-      raster::values(pop_raster_cropped) <- as.vector(pop_raster_cropped * 0.01440115)
+      raster::values(pop_raster_cropped) <- as.vector(pop_raster_cropped * (((resample_to_res)^2)/((pop_raster_res)^2)))
 
       # performing idw on population densities
 
@@ -105,22 +110,39 @@ regional_summary <- function(colormap, pol_data_location, pop_raw_raster, resolu
 
       # joining with the colormap to get area names
       region_brick_df_arrow_summary_shp <- region_brick_df_arrow_summary %>%
-        left_join(colormap, by = c("objectid_gadm2" = "objectid"))
+        left_join(colormap, by = c("objectid_gadm2" = "objectid")) %>%
+        mutate(whostandard = who_pm2.5_standard) %>%
+        select(objectid_gadm2, iso_alpha3, NAME_0, NAME_1, NAME_2, total_population, whostandard, avg_pm2.5_pollution, geometry) %>%
+        rename(country = NAME_0, name_1 = NAME_1, name_2 = NAME_2, population = total_population, !!cur_pol_col_name := avg_pm2.5_pollution)
+
 
       # remove the geometry column
       region_brick_df_arrow_summary_non_geom <- region_brick_df_arrow_summary_shp %>%
         sf::st_as_sf() %>%
         sf::st_drop_geometry()
 
-      master_list[[j]] <- region_brick_df_arrow_summary_non_geom
+      region_years_list[[j]] <- region_brick_df_arrow_summary_non_geom
+
+      if(j == 1){
+        master_region_df <- region_years_list[[j]]
+      } else {
+        master_region_df <- master_region_df %>%
+          left_join(region_years_list[[j]], by = c("objectid_gadm2", "iso_alpha3", "country", "name_1", "name_2", "population", "whostandard"))
+      }
+
 
       print(str_c("j: ", j))
 
-     }
+    }
+
+    master_region_years_list[[i]] <- master_region_df
+
 
     }
 
 
-  return(master_list)
+  final_df_return <- dplyr::bind_rows(master_region_years_list)
+
+  return(final_df_return)
 
 }

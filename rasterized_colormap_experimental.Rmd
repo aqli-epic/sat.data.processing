@@ -646,6 +646,17 @@ print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " mi
 
 ```{r}
 
+#> create a vector of objectids where population is NA
+
+# read in the gadm level 2 file
+gadm2_aqli_2021 <- readr::read_csv("./ar.2023.update.using.2021.pol.data/data/output_vit/gadm2_aqli2021_vit.csv")
+
+# NA pop regions
+objectid_gadm2_na_pop <- gadm2_aqli_2021 %>%
+  filter(is.na(population)) %>%
+  pull(objectid_gadm2) %>%
+  as.vector()
+
 ```
 
 
