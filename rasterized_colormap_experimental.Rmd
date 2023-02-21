@@ -36,6 +36,9 @@ aqli_lyl_constant <- 0.098
 india_pm2.5_standard <- 40 # in micrograms per cubic meter
 region_pm2.5_standard <- 15 # China
 
+# helpful functions
+`%notin%` <- Negate(`%in%`)
+
 print("Libraries and Global variables loaded in.")
 
 ```
@@ -643,8 +646,8 @@ print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " mi
 
 # Hopefully, once this process is complete all of the regions would be captured. If not, you can try resampling to an even higher resolution, e.g. 0.0001 (10mx10m). But, that would be extremely memory intensive.
 
-
-```{r}
+# NA pop regions capture
+```{r na_pop_regions_capture}
 
 #> create a vector of objectids where population is NA
 
@@ -657,18 +660,105 @@ objectid_gadm2_na_pop <- gadm2_aqli_2021 %>%
   pull(objectid_gadm2) %>%
   as.vector()
 
+# processing all NA pop regions and outputting a single dataset for all regions containing pollution info for all years
+na_pop_regions_processed <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, 0.001,objectid_gadm2_na_pop, 1998, 0.00833333)
+
+# calculating area of the 97 na population regions (sanity check)
+na_pop_regions_colormap <- colormap %>%
+  filter(objectid %in% objectid_gadm2_na_pop)
+
+# calculating area for the above regions, after transforming to crs 4326
+na_pop_regions_colormap <- st_transform(na_pop_regions_colormap, 4326)
+na_pop_regions_colormap <- st_make_valid(na_pop_regions_colormap)
+
+# creating a new column that will measure area in square kilometers
+na_pop_regions_colormap$area <- as.numeric(st_area(na_pop_regions_colormap)/(10^6))
+
+# creating a new column that displays area without units
+na_pop_regions_colormap <- na_pop_regions_colormap %>%
+  mutate(area_sans_units = as.numeric(area)) %>%
+  st_drop_geometry()
+
+na_pop_regions_colormap %>%
+  filter(area_sans_units > 0.2) %>%
+  nrow()
+
 ```
 
+# missing regions capture
+```{r missing_regions_capture}
+#> Applying a similar
+ 
+# area calculations example
+# c_russia <- colormap %>% filter(NAME_0 == "Russia")
+# c_russia <- st_transform(c_russia, 4326)
+# c_russia <- c_russia %>% st_make_valid()
+# c_russia$area <- st_area(c_russia)/(10^6)
 
+# read in 2021 processed aqli gadm2 data
+aqli_2021_gadm2_test <- read_csv("./ar.2023.update.using.2021.pol.data/data/output_vit/gadm2_aqli2021_vit.csv")
 
+# get indices for missing areas
+missing_ids_index <- colormap$objectid %notin% aqli_2021_gadm2_test$objectid_gadm2
 
+# missing areas
+missing_areas <- colormap[missing_ids_index, ]
 
+# calculating areas for missing areas and filetering areas whose area is less than or equal to  a threshold
+missing_areas <- st_transform(missing_areas, 4326)
+missing_areas <- st_make_valid(missing_areas)
 
+# creating a new column called area
+missing_areas$area <- as.numeric(st_area(missing_areas)/(10^6))
 
+# create a non-geom version of the dataset
+missing_areas_drop_geom <- missing_areas %>%
+  mutate(area_sans_units = as.numeric(area)) %>%
+  st_drop_geometry()
 
+# viewing the top 50 largest missing areas
+missing_areas_drop_geom %>%
+  slice_max(area_sans_units > 50) %>% View() 
 
+# regions that we expect to be missing and filtering them out of the above list
+missing_regions_exp_to_be_missing <- readxl::read_xlsx("C:/Users/Aarsh/Desktop/others/part-1_expectToBeMissing.xlsx")
 
+# regions we don't expect to be missing according to the csv
+missing_regions_dont_expect_missing <- missing_areas_drop_geom %>%
+  filter(NAME_0 %notin% missing_regions_exp_to_be_missing$NAME_0 & 
+        NAME_1 %notin% missing_regions_exp_to_be_missing$NAME_1 &
+        NAME_2 %notin% missing_regions_exp_to_be_missing$NAME_2)
 
+# regions that we don't expect to be missing according to the object ids
+missing_regions_dont_expect_missing_objid <- missing_areas_drop_geom %>%
+  filter(area_sans_units < 245.9) %>%
+  pull(objectid) %>%
+  as.vector()
+
+# filtering based on the above criteria
+foo <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, 0.001,missing_regions_dont_expect_missing_objid, 1998, 0.00833333)
+
+#> filtering based on putting a constraint on the extent
+
+# going in a loop through all missing regions and checking extents along the way and keeping only those that fit a certain criteria
+
+# object id's that lie within 67.995 N and -54.995 S
+rel_obj_ids <- c()
+
+for (i in 1:nrow(missing_areas)){
+  tmp_extent <- extent(missing_areas[i, ])
+  if(((tmp_extent[3] < -54.995) | (tmp_extent[4] > 67.995) == TRUE)){
+    next
+  } else {
+    rel_obj_ids[i] <- missing_areas[i, ]$objectid
+  }
+}
+rel_obj_ids <- rel_obj_ids[!is.na(rel_obj_ids)]
+
+# filtering based on the above criteria
+foo <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, 0.001, rel_obj_ids, 1998, 0.00833333)
+
+```
 
 
 # Sanity checks area (deactivated for now)
