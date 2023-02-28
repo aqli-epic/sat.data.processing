@@ -125,6 +125,8 @@ ssd_location_collapsed_gadm2_data_path <- stringr::str_c(ssd_drive, aqli_data_sh
 
 ```
 
+
+
 # main pipeline to get yearly gadm2 and high res pollution datasets
 
 ```{r get_yearly_pol_datasets, echo=FALSE}
@@ -760,6 +762,128 @@ foo <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, 
 
 ```
 
+# combining the captured regions in a single file and appending it to the final gadm2 file, then recollapsing it to gadm1 and gadm 0
+
+```{r}
+#> read in the final gadm2 processed file for 2021 (shared with ViT)
+gadm2_aqli_2021 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output_vit/gadm2_aqli2021_vit.csv")
+
+#> read in the 78 missing regions processed file (64 captured) and do some minor cleaning (rounding off the population interpolated column and rounding the pm column numbers to 2 decimal points)
+
+# read in the missing regions file
+missing_regions_processed <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/missing_regions_and_na_pop_regions_0.001_processed/78_missing_regions_processed.csv") 
+
+# round the population column to the nearest integer (population data was interpolated by resampling population densities, hence we see some decimals)
+missing_regions_processed$population <- round(missing_regions_processed$population)
+
+# round the pm columns to a single decimal point
+missing_regions_processed <- missing_regions_processed %>%
+  dplyr::mutate(across(dplyr::matches("pm"), ~(round(.x, 1)), .names = "{col}"))
+
+
+#> read in the 97 NA population processed file (20 captured) and do some minor cleaning (rounding off the population interpolated column and rounding the pm column numbers to 2 decimal points)
+
+# read in the file
+na_pop_regions_processed <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/missing_regions_and_na_pop_regions_0.001_processed/97_na_population_resamp_0.001_processed.csv")
+
+# round population data to the neareset integer (population data was interpolated by resampling population densities, hence we see some decimals)
+
+na_pop_regions_processed$population <- round(na_pop_regions_processed$population)
+
+# round the pm columns to a single decimal point
+
+na_pop_regions_processed <- na_pop_regions_processed %>%
+   dplyr::mutate(across(dplyr::matches("pm"), ~(round(.x, 1)), .names = "{col}"))
+
+#> append the above 2 tables into a single table and getting rid where population  = 0
+
+# bind rows
+final_regions_toadd_df <- na_pop_regions_processed %>%
+  bind_rows(missing_regions_processed)
+
+# get rid of rows where population = 0
+final_regions_toadd_df <- final_regions_toadd_df %>%
+  filter(population != 0)
+
+#> add national standards column
+
+# read in the national standards file in the pipeline above
+
+# adding the national standards column
+final_regions_toadd_df <- final_regions_toadd_df %>%
+  left_join(national_standards_pm2.5, by = "country") %>%
+  select(objectid_gadm2:whostandard, natstandard_updated, dplyr::everything()) %>%
+  rename(natstandard = natstandard_updated)
+
+# replace natstandard == "No national standard", with NA, and then changing its data type to "numeric"
+final_regions_toadd_df <- final_regions_toadd_df %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == "No national standard", NA, natstandard))
+
+final_regions_toadd_df$natstandard <- as.numeric(final_regions_toadd_df$natstandard)
+
+# adding in the life years lost relative to who and national standards column
+
+# adding in the life years lost columns and doing some basic cleaning of column names to bring it into the format that we want, as per the AQLI data dictionary
+
+final_regions_toadd_df <- final_regions_toadd_df %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who_{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat_{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard, everything()) %>%
+    dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 1)), .names = "{col}"))
+
+# appending the above "to be added" regions back into the master gadm2_aqli_2021_vit file and then sorting by objectid_gadm2
+gadm2_aqli_2021_with_added_regions <- gadm2_aqli_2021 %>%
+  bind_rows(final_regions_toadd_df) %>%
+  arrange(objectid_gadm2)
+
+# collapsing the final gadm2 to gadm0
+
+gadm0_aqli_2021_with_added_regions <- gadm2_aqli_2021_with_added_regions %>%
+dplyr::group_by(country) %>%
+dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                 total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+select(objectid_gadm2, iso_alpha3, country, total_population, whostandard, natstandard, dplyr::everything()) %>%
+dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+dplyr::rename(population = total_population, 
+              objectid_gadm0 = objectid_gadm2) %>%
+dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who_{col}")) %>%
+dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat_{col}")) %>%
+dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+dplyr::select(objectid_gadm0, iso_alpha3, country, population, whostandard, natstandard, dplyr::everything()) %>%
+dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 1)), .names = "{col}"))
+
+# collapsing the final gadm2 to gadm1
+
+gadm1_aqli_2021_with_added_regions <- gadm2_aqli_2021_with_added_regions %>%
+  dplyr::group_by(country, name_1) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+  dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+  dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                   total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  select(objectid_gadm2, iso_alpha3, country, name_1, total_population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+  dplyr::rename(population = total_population, 
+                objectid_gadm1 = objectid_gadm2) %>%
+  dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+    dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who_{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat_{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm1, iso_alpha3, country, name_1, population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 1)), .names = "{col}"))
+
+
+
+```
 
 # Sanity checks area (deactivated for now)
 ```{r sanity_checks, eval=FALSE, include=FALSE}
