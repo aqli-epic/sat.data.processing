@@ -885,6 +885,29 @@ gadm1_aqli_2021_with_added_regions <- gadm2_aqli_2021_with_added_regions %>%
 
 ```
 
+# Politically Sensitive Regions
+
+```{r}
+#> create a India point of view gadm2 file
+
+# gilgit baltistan
+gilgit_baltistan <- gadm2_aqli_2021_with_added_regions %>%
+  filter(country == "Pakistan", name_1 == "Gilgit Baltistan") %>%
+  mutate(country == "India") 
+
+# Azad Kashmir
+azad_kashmir <- gadm2_aqli_2021_with_added_regions %>%
+  filter(country == "India", name_1 == "Azad Kashmir") %>%
+  mutate(country == "India")
+
+# India politically sensitve regions gadm2 file
+gadm2_aqli_2021_with_added_regions %>%
+  filter(name_1 %notin% c("Azad Kashmir", "Gilgit Baltistan")) %>%
+  bind_rows(gilgit_baltistan) %>%
+  bind_rows(azad_kashmir)
+
+```
+
 # Sanity checks area (deactivated for now)
 ```{r sanity_checks, eval=FALSE, include=FALSE}
 #> sanity checks time-------------------------------------------------------------
