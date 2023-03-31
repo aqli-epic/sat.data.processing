@@ -1482,12 +1482,17 @@ illinois_raster_r_0.001_test <- fasterize(colormap %>% filter(NAME_0 == "United 
 # rasterizing a subset of the colormap shapefile to 0.001 using fasterize": test (Wujal Wujal)
 wujalwujal_raster_r_0.001_test <- fasterize(colormap %>% filter(NAME_0 == "Australia", NAME_2 == "Wujal Wujal"), raster::raster(ext = raster::extent(colormap %>% filter(NAME_0 == "Australia", NAME_2 == "Wujal Wujal")), resolution = 0.001, crs = crs(colormap)), field = "objectid", fun = "last")
 
-# test
-foo <- regional_summary(pol_2018_0.01_test, pop_raw_landscan, region_rasterized_shapefile)
-foo1 <- regional_summary(pol_2018_0.01_test, pop_raw_landscan, gujarat_raster_r_0.001_test)
-foo2 <- regional_summary(pol_2018_0.01_test, pop_raw_landscan, wujalwujal_raster_r_0.001_test)
-foo3 <- regional_summary(pol_2018_0.01_test, pop_raw_landscan, illinois_raster_r_0.001_test)
+#> test regional summary function and then run it on zero population regions with normal (i.e. with full mask) 2018 population file. Then test with "no land mask" to see if it helps
 
+# read in the file that lists all 0 population regions
+zero_pop <- read_csv("./experimentation/zero_population_regions.csv")
+
+foo <- regional_summary(colormap, "C:/Users/Aarsh/Desktop/aqli-epic/sat.data.processing/experimentation/full_mask_2018_0.01/", pop_raw_landscan_crop_pol, 0.001, zero_pop$obj_id, 2018, 0.008)
+
+foo1 <- regional_summary(colormap, "C:/Users/Aarsh/Desktop/aqli-epic/sat.data.processing/experimentation/no_land_mask_2018_0.01/", pop_raw_landscan_crop_pol, 0.001, zero_pop$obj_id, 2018, 0.008)
+
+
+foo_10m <- regional_summary(colormap, "C:/Users/Aarsh/Desktop/aqli-epic/sat.data.processing/experimentation/full_mask_2018_0.01/", pop_raw_landscan_crop_pol, 0.0001, zero_pop$obj_id, 2018, 0.008)
 
 
 ```
