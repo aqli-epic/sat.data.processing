@@ -1286,6 +1286,6 @@ heatmap_africa_final <- grid.arrange(heatmap_africa_2020, heatmap_africa_2021, n
 # tmp 
 
 ```{r}
-
+#
 ```
 
