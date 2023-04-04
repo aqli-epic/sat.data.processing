@@ -104,8 +104,8 @@ regional_summary <- function(colormap, pol_data_location, pop_raw_raster, resamp
         dplyr::collect() %>%
         dplyr::mutate(pop_weights = pop/sum(pop, na.rm = TRUE),
                       pollution_pop_weighted = pop_weights*pol) %>%
-        dplyr::summarise(total_population = sum(pop, na.rm = TRUE),
-                         avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
+        dplyr::summarise(total_population = round(sum(pop, na.rm = TRUE)),
+                         avg_pm2.5_pollution = round(sum(pollution_pop_weighted, na.rm = TRUE), 2)) %>%
         dplyr::rename(objectid_gadm2 = objid)
 
       # joining with the colormap to get area names

@@ -410,12 +410,116 @@ for(i in 1:length(collapsed_gadm2_files_vec_rel_files)){
   }
 }
 
-#> missing regions and zero population gadm2 capture using the regional_summary function (by resampling to a resolution of 0.001) from the helper file in the R sub-directory and adding them back into the aqli_gadm2_collapse_master object, before continuing to add life years lost columns to it.
+#> missing regions and zero population gadm2 capture using the regional_summary function (by resampling to a resolution of 0.001) from the helper file in the R sub-directory and adding them back into the aqli_gadm2_collapse_master object, before continuing to add life years lost columns to it.------------------
 
-# store objectids of all resampled/captured (to a resolution of 0.001) na population regions in a vector (already present in the gadm2 collapsed file and will replace their old version). [x]/97 na pop regions have been captured. For the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured.
+# If, not running the pipeline from scratch, use the already written gadm2_aqli dataset and uncomment the below block, otherwise use aqli_gadm2_collapse_master.
 
-# store objectids of all resampled (to a resolution of 0.001) missing regions, that we don't expect to be missing, in a vector (not present in the current gadm2 collapsed file, and will be appended to the file after na pop regions have been replaced. Post that sort by objectid_gadm2). [y]/83 missing regions (that we don't expect to be missing) have been captured. The remaining 70 regions, we do expect to be missing are missing because they are either above ~67 degree N, or below ~ 55 degree south. Again, for the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured.
+# gadm2_aqli_2021 <- readr::read_csv("./ar.2023.update.using.2021.pol.data/data/output_vit/gadm2_aqli2021_vit.csv")
 
+# NA pop regions object ids
+# objectid_gadm2_na_pop <- gadm2_aqli_2021 %>%
+#   filter(is.na(population)) %>%
+#   pull(objectid_gadm2) %>%
+#   as.vector()
+
+# NA pop regions object ids
+objectid_gadm2_na_pop <- aqli_gadm2_collapse_master %>%
+  filter(population == 0) %>%
+  pull(objectid_gadm2) %>%
+  as.vector()
+
+# processing all NA pop regions and outputting a single dataset for all regions containing pollution info for all years
+
+res_resample_to <- 0.001 # mention the resolution to which the na pop region is to be resampled.
+res_resample_from <- 0.00833333 # mention the current resoltion 
+start_year <- 1998 # mention start year, usually the same as the first year for which the AQLI data is available.
+
+na_pop_regions_processed <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, res_resample_to,objectid_gadm2_na_pop, start_year, res_resample_from)
+
+# adding a temporary national standard column to the na_pop_regions_processed dataset so that it matches the aqli_gadm2_collapse_master dataset
+
+na_pop_regions_processed <- na_pop_regions_processed %>%
+  mutate(natstandard = NA) %>%
+  select(objectid_gadm2:whostandard, natstandard, everything())
+
+## filter out those regions whose population doesn't make sense (limitation of the current resampling pipeline, need to resolved in future updates)
+
+# # calculating area of the 97 na population regions (sanity check)
+# na_pop_regions_colormap <- colormap %>%
+#   filter(objectid %in% objectid_gadm2_na_pop)
+# 
+# # calculating area for the above regions, after transforming to crs 4326
+# na_pop_regions_colormap <- st_transform(na_pop_regions_colormap, 4326)
+# na_pop_regions_colormap <- st_make_valid(na_pop_regions_colormap)
+# 
+# # creating a new column that will measure area in square kilometers
+# na_pop_regions_colormap$area <- as.numeric(st_area(na_pop_regions_colormap)/(10^6))
+# 
+# # creating a new column that displays area without units
+# na_pop_regions_colormap <- na_pop_regions_colormap %>%
+#   mutate(area_sans_units = as.numeric(area)) %>%
+#   st_drop_geometry()
+
+
+## post finalizing the na pop regions that are to be included, now getting the missing regions
+
+# read in 2021 processed aqli gadm2 data (only do this if running this specific bit of the pipeline), otherwise use the aqli_gadm2_collapse_master dataset
+# aqli_2021_gadm2_test <- read_csv("./ar.2023.update.using.2021.pol.data/data/output_vit/gadm2_aqli2021_vit.csv")
+
+# get indices for missing areas
+missing_ids_index <- colormap$objectid %notin% aqli_gadm2_collapse_master$objectid_gadm2
+
+# missing areas
+missing_areas <- colormap[missing_ids_index, ]
+
+# calculating areas for missing areas and filetering areas whose area is less than or equal to  a threshold
+missing_areas <- st_transform(missing_areas, 4326)
+missing_areas <- st_make_valid(missing_areas)
+
+# creating a new column called area
+missing_areas$area <- as.numeric(st_area(missing_areas)/(10^6))
+
+# create a non-geom version of the dataset
+missing_areas_drop_geom <- missing_areas %>%
+  mutate(area_sans_units = as.numeric(area)) %>%
+  st_drop_geometry()
+
+# regions that we expect to be missing and filtering them out of the above list
+missing_regions_exp_to_be_missing <- readxl::read_xlsx("C:/Users/Aarsh/Desktop/others/part-1_expectToBeMissing.xlsx")
+
+# # regions we don't expect to be missing according to the csv (the method right below, is more accurate way to get the 153 - 70 regions that we don't expect to be missing).
+# missing_regions_dont_expect_missing <- missing_areas_drop_geom %>%
+#   filter(NAME_0 %notin% missing_regions_exp_to_be_missing$NAME_0 & 
+#         NAME_1 %notin% missing_regions_exp_to_be_missing$NAME_1 &
+#         NAME_2 %notin% missing_regions_exp_to_be_missing$NAME_2)
+
+# regions that we don't expect to be missing according to the object ids (this will give us the 83 regions that we don't expect to be missing).
+missing_regions_dont_expect_missing_objid <- missing_areas_drop_geom %>%
+  filter(area_sans_units < 245.9) %>%
+  pull(objectid) %>%
+  as.vector()
+
+# capture missing regions and add a temporary natstandard column that will be updated later on
+missing_regions_capture <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, res_resample_to,missing_regions_dont_expect_missing_objid, start_year, res_resample_from)
+
+missing_regions_capture <- missing_regions_capture %>%
+    mutate(natstandard = NA) %>%
+  select(objectid_gadm2:whostandard, natstandard, everything())
+
+## store objectids of all resampled/captured (to a resolution of 0.001) na population regions in a vector (already present in the gadm2 collapsed file and will replace their old version). [x]/97 na pop regions have been captured. For the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured.
+
+## store objectids of all resampled (to a resolution of 0.001) missing regions, that we don't expect to be missing, in a vector (not present in the current gadm2 collapsed file, and will be appended to the file after na pop regions have been replaced. Post that sort by objectid_gadm2). [y]/83 missing regions (that we don't expect to be missing) have been captured. The remaining 70 regions, we do expect to be missing are missing because they are either above ~67 degree N, or below ~ 55 degree south. Again, for the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured.
+
+
+na_pop_regions_processed_obj_ids <- na_pop_regions_processed$objectid_gadm2
+
+aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
+  filter(objectid_gadm2 %notin% na_pop_regions_processed_obj_ids) %>%
+  bind_rows(na_pop_regions_processed_obj_ids) %>%
+  bind_rows(missing_regions_capture) %>%
+  arrange(objectid_gadm2)
+
+#-----------------------------------------------------------------
 
 # benchmarking
 threshold_12 <- Sys.time() 
