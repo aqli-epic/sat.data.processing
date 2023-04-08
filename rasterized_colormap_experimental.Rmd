@@ -38,6 +38,7 @@ region_pm2.5_standard <- 15 # China
 
 # helpful functions
 `%notin%` <- Negate(`%in%`)
+source("./R/sat.data.processing.general.helper.R")
 
 print("Libraries and Global variables loaded in.")
 
@@ -120,6 +121,16 @@ ssd_location_collapsed_gadm1_data_path <- stringr::str_c(ssd_drive, aqli_data_sh
 #> collapsed data path: gadm2 level
 ssd_location_collapsed_gadm2_data_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", gadm2_folder_name, "/", sep  = "")
 
+#> na population regions processed folder path
+
+na_pop_regions_folder_name <- "na_population_gadm2_regions_resamp_to_0.001_processed"
+
+na_pop_regions_folder_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", na_pop_regions_folder_name , "/", sep  = "")
+
+#> missing regions processed folder path
+missing_regions_folder_name <- "missing_gadm2_regions_resamp_to_0.001_processed"
+
+missing_regions_folder_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", missing_regions_folder_name , "/", sep  = "")
 
 #-------------------------------------------------
 
@@ -203,9 +214,9 @@ for (i in 1:length(pol_data_list)){
   #   next
   # }
   
-  if(i > 3){
-    break
-  }
+  # if(i > 3){
+  #   break
+  # }
   
   # pollution file name given the current iteration
   cur_pol_file_name <- pol_data_list[i]
@@ -350,14 +361,14 @@ print(str_c("Total time taken (main pipeline for loop) with ", i, " years of pol
 #---------
 #> Note: if you have already processed the pollution datasets in the above chunk and just want to run the combining code in this chunk, make sure to uncomment the following code and run it before proceeding to get the colormap and pol_col_name_vec. Also, make sure to run the "setup" and "set path" chunks. If you have already run the above chunks, then you would already have these objects and in that case there is no need to run the below commented code.
 
-# load latest colormap shapefile for (last complete updated: November, 2022)
-colormap <- sf::st_read(str_c(shp_files_location, colormap_location, sep = ""))
-
-# generate the pol_col_name_vec
-pol_col_name_vec <- c()
-for(i in 1:24){
-     pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
- }
+# # load latest colormap shapefile for (last complete updated: November, 2022)
+# colormap <- sf::st_read(str_c(shp_files_location, colormap_location, sep = ""))
+# 
+# # generate the pol_col_name_vec
+# pol_col_name_vec <- c()
+# for(i in 1:24){
+#      pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
+#  }
 
 #-----------
 
@@ -410,6 +421,11 @@ for(i in 1:length(collapsed_gadm2_files_vec_rel_files)){
   }
 }
 
+#> write aqli_gadm2_collapse_master df's current version (which does not include the missing regions and also does not capture the na pop regions that we will do next). Next step will be to capture the na population regions (by that I don't mean regions with NA in the population column (no such regions exist), but rather regions where population = 0) and missing regions and then finally we'll incorporate them in the aqli_gadm2_collapse_master and write that final version later.
+
+aqli_gadm2_collapse_master %>%
+    readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "[missingAndNAPopRegionsNotYetIncorporatedVersion]master_global_allyears_gadm2_non_geom.csv"))
+
 #> missing regions and zero population gadm2 capture using the regional_summary function (by resampling to a resolution of 0.001) from the helper file in the R sub-directory and adding them back into the aqli_gadm2_collapse_master object, before continuing to add life years lost columns to it.------------------
 
 # If, not running the pipeline from scratch, use the already written gadm2_aqli dataset and uncomment the below block, otherwise use aqli_gadm2_collapse_master.
@@ -441,6 +457,11 @@ na_pop_regions_processed <- regional_summary(colormap, pol_data_location, pop_ra
 na_pop_regions_processed <- na_pop_regions_processed %>%
   mutate(natstandard = NA) %>%
   select(objectid_gadm2:whostandard, natstandard, everything())
+
+# write the na pop regions processed df to ssd's relevant folder
+
+na_pop_regions_processed %>% 
+  write_csv(str_c(na_pop_regions_folder_path, "na_pop_regions_processed.csv"))
 
 ## filter out those regions whose population doesn't make sense (limitation of the current resampling pipeline, need to resolved in future updates)
 
@@ -493,9 +514,10 @@ missing_regions_exp_to_be_missing <- readxl::read_xlsx("C:/Users/Aarsh/Desktop/o
 #         NAME_1 %notin% missing_regions_exp_to_be_missing$NAME_1 &
 #         NAME_2 %notin% missing_regions_exp_to_be_missing$NAME_2)
 
-# regions that we don't expect to be missing according to the object ids (this will give us the 83 regions that we don't expect to be missing).
+# regions that we don't expect to be missing according to the object ids (this will give us the 83 regions that we don't expect to be missing). Post that, I'll remove a 5 other regions by feeding in object ids that I know are outside the bounds of the ACAG pm2.5 data limits (). As of now, this part of code requires human intervention and a bit of testing around (every year this bit would have to be manually changed, e.g. the area threshold in the filter command below), but I am thinking of a better way to automate this.
 missing_regions_dont_expect_missing_objid <- missing_areas_drop_geom %>%
   filter(area_sans_units < 245.9) %>%
+  filter(objectid %notin% c(28044, 28048, 28063, 35561, 35567)) %>%
   pull(objectid) %>%
   as.vector()
 
@@ -506,17 +528,28 @@ missing_regions_capture <- missing_regions_capture %>%
     mutate(natstandard = NA) %>%
   select(objectid_gadm2:whostandard, natstandard, everything())
 
+# missing regions captured write to ssd
+missing_regions_capture %>%
+   write_csv(str_c(missing_regions_folder_path, "missing_regions_processed.csv"))
+
 ## store objectids of all resampled/captured (to a resolution of 0.001) na population regions in a vector (already present in the gadm2 collapsed file and will replace their old version). [x]/97 na pop regions have been captured. For the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured.
 
 ## store objectids of all resampled (to a resolution of 0.001) missing regions, that we don't expect to be missing, in a vector (not present in the current gadm2 collapsed file, and will be appended to the file after na pop regions have been replaced. Post that sort by objectid_gadm2). [y]/83 missing regions (that we don't expect to be missing) have been captured. The remaining 70 regions, we do expect to be missing are missing because they are either above ~67 degree N, or below ~ 55 degree south. Again, for the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured.
 
+# a subset of the above na pop regions and missing regions that have been saved have populations that are not captured very well, open those csv's in excel and browse through them and get rid of populations that seem super unreasonable (e.g. a population of 1 for a huge region). This part as of now is manual, but I am thinking of ways to automate it. It's not just that rows with population below a certain number can be eliminated, it's more subtle than that, so need to think about that a little and implement a more elegant way to do this bit in the future. Note that, in the na pop regions and missing regions folder on the ssd, there will be 2 versions of each. One with all regions, and the other one (will have the word "handpicked" in the file name), with handpicked regions. Read in the handpicked regions below.
 
-na_pop_regions_processed_obj_ids <- na_pop_regions_processed$objectid_gadm2
+na_pop_regions_processed_handpicked <- read_csv(str_c(na_pop_regions_folder_path, "na_pop_regions_processed_handpicked.csv"))
+
+missing_regions_processed_handpicked <- read_csv(str_c(missing_regions_folder_path, "missing_regions_processed_handpicked.csv"))
+
+
+na_pop_regions_processed_handpicked_obj_ids <- na_pop_regions_processed_handpicked$objectid_gadm2
 
 aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
-  filter(objectid_gadm2 %notin% na_pop_regions_processed_obj_ids) %>%
-  bind_rows(na_pop_regions_processed_obj_ids) %>%
-  bind_rows(missing_regions_capture) %>%
+  filter(objectid_gadm2 %notin% na_pop_regions_processed_handpicked_obj_ids) %>%
+  bind_rows(na_pop_regions_processed_handpicked) %>%
+  bind_rows(missing_regions_processed_handpicked) %>%
+  filter(population != 0) %>%
   arrange(objectid_gadm2)
 
 #-----------------------------------------------------------------
@@ -562,10 +595,10 @@ aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
 # benchmarking
 threshold_13 <- Sys.time() 
 
-# write the above (non-geometry version) of gadm2 master file to the collapsed/gadm2 folder
+# write the above (non-geometry version) of gadm2 master file to the collapsed/gadm2 folder (this version incorporates the na pop and missing regions, but only partially incoroporate ViT column name changes request). Full changes version as requested by ViT will be written at the end of this chunk for all 3 levels (both geom and non-geom versions)
 
 aqli_gadm2_collapse_master %>%
-  readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom_April022023.csv"))
+  readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_non_geom.csv"))
 
 #> add in the geometry column by left joining the above with a color file and then write that to the collapsed/gadm2 folder
 
@@ -627,9 +660,10 @@ aqli_gadm0_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
    dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) 
   
 
-# write the above (non-geometry version) of gadm0 master file to the collapsed/gadm0 folder
+# write the above (non-geometry version) of gadm0 master file to the collapsed/gadm0 folder (this version incorporates the na pop and missing regions, but only partially incoroporate ViT column name changes request). Full changes version as requested by ViT will be written at the end of this chunk for all 3 levels (both geom and non-geom versions)
+
 aqli_gadm0_collapse_from_gadm2 %>%
-  readr::write_csv(str_c(ssd_location_collapsed_gadm0_data_path, "master_global_allyears_gadm0_non_geom_April022023.csv"))
+  readr::write_csv(str_c(ssd_location_collapsed_gadm0_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_non_geom.csv"))
 
 
 # read in the gadm0 shape file (which is collapsed from the colormap) and get it ready for joining with the above summary table
@@ -700,9 +734,10 @@ aqli_gadm1_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
    dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) 
   
 
-# write the above (non-geometry version) of gadm1 master file to the collapsed/gadm1 folder
+# write the above (non-geometry version) of gadm1 master file to the collapsed/gadm1 folder (this version incorporates the na pop and missing regions, but only partially incoroporate ViT column name changes request). Full changes version as requested by ViT will be written at the end of this chunk for all 3 levels (both geom and non-geom versions)
+
 aqli_gadm1_collapse_from_gadm2 %>%
-  readr::write_csv(str_c(ssd_location_collapsed_gadm1_data_path, "master_global_allyears_gadm1_non_geom_April022023.csv"))
+  readr::write_csv(str_c(ssd_location_collapsed_gadm1_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_non_geom.csv"))
 
 # read in the gadm1 shape file (which is collapsed from the colormap) and get it ready for joining with the above summary table
 
@@ -746,6 +781,13 @@ aqli_gadm1_collapse_from_gadm2_with_geom <- aqli_gadm1_collapse_from_gadm2_with_
 
 aqli_gadm1_collapse_from_gadm2_with_geom %>%
   sf::st_write(str_c(ssd_location_collapsed_gadm1_data_path, "master_global_allyears_gadm1_with_geom_April022023.shp"), delete_layer = TRUE)
+
+# For gadm 0, 1 and 2 write the final versions (both geom and non-geom) of files, incorporating all remaining ViT column name changes/drop requests, add notes from the sticky notes (and then remove the sticky notes comment) and wrap this up!!!.
+
+
+
+
+
 
 #-----------
 end_time_vit_data_pipeline <- Sys.time()

@@ -97,7 +97,8 @@ regional_summary <- function(colormap, pol_data_location, pop_raw_raster, resamp
       region_brick_df_arrow <- region_brick_df %>%
         arrow::as_arrow_table()
 
-      # summarizing and finally testing
+      # summarizing and finally testing (note that as a result of resampling tiny regions to a high resolution, and then
+      # collapsing them at gadm level 2, the population might not be an integer, hence rounding is needed in the population column)
       region_brick_df_arrow_summary <- region_brick_df_arrow %>%
         dplyr::filter((!is.na(objid)) & ((as.character(objid) != "NA"))) %>%
         dplyr::group_by(objid) %>%
