@@ -532,11 +532,15 @@ missing_regions_capture <- missing_regions_capture %>%
 missing_regions_capture %>%
    write_csv(str_c(missing_regions_folder_path, "missing_regions_processed.csv"))
 
-## store objectids of all resampled/captured (to a resolution of 0.001) na population regions in a vector (already present in the gadm2 collapsed file and will replace their old version). [x]/97 na pop regions have been captured. For the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured.
+## store objectids of all resampled/captured (to a resolution of 0.001) na population regions in a vector (already present in the gadm2 collapsed file and will replace their old version). 16/97 na pop regions have been captured. For the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured. A couple notes (on some regions that were manually dropped): na_pop_regions_dropped_obj_ids (if no specific comments mentioned, means population is 0 and as a result pollution was 0): 25050 (pop avialable, but all pollution  columns are 0, weird), 35356 (population is 0, but all pollution columns are available, more weirder), 37791 (population is available, but all pollution data columns are missing), 42205 (zero population, but all pollution columns are available). Only kept rows where both population and atleast one pollution column is available.
 
-## store objectids of all resampled (to a resolution of 0.001) missing regions, that we don't expect to be missing, in a vector (not present in the current gadm2 collapsed file, and will be appended to the file after na pop regions have been replaced. Post that sort by objectid_gadm2). [y]/83 missing regions (that we don't expect to be missing) have been captured. The remaining 70 regions, we do expect to be missing are missing because they are either above ~67 degree N, or below ~ 55 degree south. Again, for the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured.
+## store objectids of all resampled (to a resolution of 0.001) missing regions, that we don't expect to be missing, in a vector (not present in the current gadm2 collapsed file, and will be appended to the file after na pop regions have been replaced. Post that sort by objectid_gadm2). 47/83 missing regions (that we don't expect to be missing) have been captured. The remaining 70 regions, we do expect to be missing are missing because they are either above ~67 degree N, or below ~ 55 degree south. Again, for the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. A couple notes on some regions that were manually dropped: missing_regions_non_zero_pop_dropped_obj_ids: 2079 (population available, but all pollution columns are 0), 25046 (population available, but all pollution columns are 0), 29681 (population available, but all pollution columns are 0), 34362 (population is 0, but all pollution columns are available), 34646 (pop was 13, pollution data was available, but pop was too low), 34834 (pop was 3 and pollution data is available, but pop was too low), 34884 (pop was 9 and pollution data was available, but population value is too low), 34893 (pop was 2 and pollution columns are available, but population value was too low), 35019 (pop was 8, pollution column data are available, but pop was too low), 35024 (0 pop, but all pollution columns are available), 35160 (0 pop, but all pollution columns are available), 35582 (0 pop, but all pollution columns are available), 35016 (pop was avail, but all pollution columns are 0), 35589 (pop 56, all pollution columns available, but pop was too low), 35603 (pop 1, all pollution columns available, but pop was too low), 36393 (pop 1, all pollution columns available, but pop was too low), 36436 (pop 4, all pollution columns available, but pop was too low), 36828 (pop was 8, and all pollution columns are available, but pop was too low). Only kept rows where both population and atleast one pollution column is available.
+
+# The regions that were manually dropped have been explained below.
 
 # a subset of the above na pop regions and missing regions that have been saved have populations that are not captured very well, open those csv's in excel and browse through them and get rid of populations that seem super unreasonable (e.g. a population of 1 for a huge region). This part as of now is manual, but I am thinking of ways to automate it. It's not just that rows with population below a certain number can be eliminated, it's more subtle than that, so need to think about that a little and implement a more elegant way to do this bit in the future. Note that, in the na pop regions and missing regions folder on the ssd, there will be 2 versions of each. One with all regions, and the other one (will have the word "handpicked" in the file name), with handpicked regions. Read in the handpicked regions below.
+
+# Before the incorporation of missing and na pop regions we had 48059 unique object ids in gadm 2 (including 97 na pop regions). Now removing the 97 na pop regions and replaing them with 16 filled pop regions and 47 regions that were previously missing, brings the final count of object ids to 48025 (48059 - 97 + 16 + 47). All in all 99.61213% (48025/48212) of the regions have been captured, where 48212 are the total number of objectids in the latest colormap shapefile.
 
 na_pop_regions_processed_handpicked <- read_csv(str_c(na_pop_regions_folder_path, "na_pop_regions_processed_handpicked.csv"))
 
@@ -630,8 +634,15 @@ colnames(aqli_gadm2_collapse_master_with_geom) <- new_col_names_gadm2_collapse_m
 aqli_gadm2_collapse_master_with_geom <- aqli_gadm2_collapse_master_with_geom %>%
   sf::st_as_sf() 
 
+# write the missing and NA pop region incorporated and ViT column names changes partially incorporated (which will be more than enough for geom version, as it is to be used internally). 
+
+#This warning was issued while writing the shapefile, need to be resolved: In CPL_write_ogr(obj, dsn, layer, driver, as.character(dataset_options): GDAL Message 1: One or several characters couldn't be converted correctly from UTF-8 to ISO-8859-1.  This warning # will not be emitted anymore
+  
 aqli_gadm2_collapse_master_with_geom %>%
-  sf::write_sf(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_with_geom_April022023.shp"))
+  sf::write_sf(str_c(ssd_location_collapsed_gadm2_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_geom.shp"))
+
+# garbage collection
+gc()
 
 #-----------
 
@@ -705,8 +716,13 @@ colnames(aqli_gadm0_collapse_from_gadm2_with_geom) <- new_col_names_gadm0_collap
 aqli_gadm0_collapse_from_gadm2_with_geom <- aqli_gadm0_collapse_from_gadm2_with_geom %>%
   sf::st_as_sf()
 
+
+# write the missing and NA pop region incorporated and ViT column names changes partially incorporated (which will be more than enough for geom version, as it is to be used internally). There were warning related to couple fields whose population values were not successfully written because it was too large a number with respect to the field: "width warning" (GDAL Message 1). Resolve this warning, a screenshot of it is stored in the gadm0 folder under collapsed folder in the ssd.
 aqli_gadm0_collapse_from_gadm2_with_geom %>%
-  sf::st_write(str_c(ssd_location_collapsed_gadm0_data_path, "master_global_allyears_gadm0_with_geom_April022023_.shp"), delete_layer = TRUE)
+  sf::write_sf(str_c(ssd_location_collapsed_gadm0_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_geom.shp"))
+
+# garbage collection
+gc()
 
 #-----------
 
@@ -779,15 +795,44 @@ colnames(aqli_gadm1_collapse_from_gadm2_with_geom) <- new_col_names_gadm1_collap
 aqli_gadm1_collapse_from_gadm2_with_geom <- aqli_gadm1_collapse_from_gadm2_with_geom %>%
   sf::st_as_sf()
 
+# write the missing and NA pop region incorporated and ViT column names changes partially incorporated (which will be more than enough for geom version, as it is to be used internally). There were warning related to couple fields whose population values were not successfully written because it was too large a number with respect to the field: "width warning" (GDAL Message 1). Resolve this warning, a screenshot of it is stored in the gadm1 folder under collapsed folder in the ssd.
+
 aqli_gadm1_collapse_from_gadm2_with_geom %>%
-  sf::st_write(str_c(ssd_location_collapsed_gadm1_data_path, "master_global_allyears_gadm1_with_geom_April022023.shp"), delete_layer = TRUE)
+  sf::write_sf(str_c(ssd_location_collapsed_gadm1_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_geom.shp"))
 
-# For gadm 0, 1 and 2 write the final versions (both geom and non-geom) of files, incorporating all remaining ViT column name changes/drop requests, add notes from the sticky notes (and then remove the sticky notes comment) and wrap this up!!!.
-
-
+#> For gadm 0, 1 and 2 write the final versions (non-geom version) of files, incorporating all remaining ViT column name changes/drop requests, add notes from the sticky notes (and then remove the sticky notes comment). Geom versions will work without ViT name restrictions as it is to be used internally, and wrap this up!!!.
 
 
+aqli_gadm2_collapse_master <- read_csv("D:/aqli.2023.report.data.share/2023.publish.Year.with.2021.data/collapsed/gadm_2/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_non_geom.csv")
 
+aqli_gadm1_collapse_from_gadm2 <- read_csv("D:/aqli.2023.report.data.share/2023.publish.Year.with.2021.data/collapsed/gadm_1/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_non_geom.csv")
+
+aqli_gadm0_collapse_from_gadm2 <- read_csv("D:/aqli.2023.report.data.share/2023.publish.Year.with.2021.data/collapsed/gadm_0/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_non_geom.csv")
+
+
+# rename: country, name_1, name_2 AND remove iso_alpha3, natstandard, whostandard
+aqli_gadm2_collapse_master %>%
+  rename(name0 = country, name1 = name_1, name2 = name_2) %>%
+  select(-c(iso_alpha3, natstandard, whostandard)) %>%
+  readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "[finalizedApr2023]gadm2_aqli2021_vit.csv"))
+
+# rename: country, name_1 AND remove iso_alpha3, natstandard, whostandard AND replace the current objectid_gadm1 column (which is a grouped serial number) with actual row number wise global serial number, by using row_number() and ungroup(). This step should be taken care of in the above steps, when this dataset is begin created for the first time. Once incorporated there, remove it from here. I found out about it, when I reached this step and will replace it whenever I can.  
+aqli_gadm1_collapse_from_gadm2 %>%
+  rename(name0 = country, name1 = name_1) %>%
+  select(-c(iso_alpha3, natstandard, whostandard)) %>%
+  ungroup() %>%
+  mutate(objectid_gadm1 = row_number()) %>%
+  readr::write_csv(str_c(ssd_location_collapsed_gadm1_data_path, "[finalizedApr2023]gadm1_aqli2021_vit.csv"))
+
+# rename country to name0 AND remove whostandard, also add an ungroup statement, when this dataset was created up top, to be safe.
+aqli_gadm0_collapse_from_gadm2 %>%
+  rename(name0 = country) %>%
+  select(-c(whostandard)) %>%
+  ungroup() %>%
+  readr::write_csv(str_c(ssd_location_collapsed_gadm0_data_path, "[finalizedApr2023]gadm0_aqli2021_vit.csv"))
+
+
+# Note that the whostandard for annual average pm2.5 has been removed from all 3 levels, but for reference it can be found in the AQLI data dictionary. As of writing of this code, it was 5 micrograms per cubic meter.
 
 #-----------
 end_time_vit_data_pipeline <- Sys.time()
