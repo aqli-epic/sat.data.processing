@@ -1,0 +1,46 @@
+AQLI Data Dictionary (for September, 2023 update)
+=================================================
+
+gadm2
+----
+objectid_gadm2: unique identifier column
+name0: country name (corresponding to a gadm level 0 region)
+name1: state/province/etc name (corresponding to a gadm level 1 region)
+name2: county/district/prefecture/etc name (corresponding to a gadm level 2 region)
+population: population of the region in question (source: LandScan)
+pmxxxx: population weighted annual average pm2.5 for year "xxxx"
+whoxxxx: Life years lost in year "xxxx" relative to the WHO PM2.5 annual average guideline of 5 micrograms per cubic meter.
+natxxxx: Life years lost relative to the National PM2.5 annual average guideline.
+
+
+gadm1
+----
+objectid_gadm1: unique identifier column
+name0: country name (corresponding to a gadm level 0 region)
+name1: state/province/etc name (corresponding to a gadm level 1 region)
+population: population of the region in question (source: LandScan)
+pmxxxx: population weighted annual average pm2.5 for year "xxxx"
+whoxxxx: Life years lost in year "xxxx" relative to the WHO PM2.5 annual average guideline of 5 micrograms per cubic meter.
+natxxxx: Life years lost relative to the National PM2.5 annual average guideline.
+
+gadm0
+----
+objectid_gadm0: unique identifier column
+iso_alpha3: 3 digit country code
+name0: country name (corresponding to a gadm level 0 region)
+population: population of the region in question (source: LandScan)
+natstandard: National PM2.5 annual average standard
+pmxxxx: population weighted annual average pm2.5 for year "xxxx"
+whoxxxx: Life years lost in year "xxxx" relative to the WHO PM2.5 annual average guideline of 5 micrograms per cubic meter.
+natxxxx: Life years lost relative to the National PM2.5 annual average guideline.
+
+
+-----------------------------
+
+Notes:
+
+(a) Our source of shapefiles is GADM: https://gadm.org/data.html
+(b) Our source of population raster: https://landscan.ornl.gov/
+(c) AQLI Methodology: https://aqli.epic.uchicago.edu/about/methodology/
+(d) WHO Annual Average PM2.5 standard used in September, 2023 update: 5 micrograms per cubic meter.
+(e) Years for which pollution and life years lost data is available: 1998 to 2021 (including 1998 and 2021).

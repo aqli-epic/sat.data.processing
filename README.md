@@ -1,20 +1,122 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# sat.data.processing
+# AQLI satellite derived PM2.5 data processing
 
 <!-- badges: start -->
 <!-- badges: end -->
 
 ## Goals of sat.data.processing:
 
--   To serve as the single place for all code and documentation that
-    goes into processing the satellite derived PM2.5 raw netCDF data
-    (alongside the population data and relevant shape files) to get a
-    final dataset which is used to build the AQLI interactive Choropleth
-    Global PM2.5 map platform.
+- To serve as the single place for all code and documentation that goes
+  into processing the satellite derived PM2.5 raw netCDF data (alongside
+  the population data and relevant shape files) to get a final dataset
+  which is used to build the AQLI interactive Choropleth Global PM2.5
+  map platform.
 
--   Please note that there is a “data”, folder in this repository, which
-    I have decided to keep out because it exceeds GitHub file size
-    limits. To get access to any raw data files in the code, please
-    write a small request note to us on <aqli-info@uchicago.edu>.
+- Please note that there is a “data”, folder in this repository, which I
+  have decided to keep out because it exceeds GitHub file size limits.
+  To get access to any raw data files in the code, please write a small
+  request note to us on <aqli-info@uchicago.edu>.
+
+- All code for the main pipeline is present in the
+  `rasterized_colormap_experimental.Rmd` file of the
+  `aqli_april2023_2dec_col_change_final_data_2023_update` branch of this
+  repository. Will soon be merged in the main branch (for now, don’t
+  merge it).
+
+- Broad overview of the code:
+
+  - Use ssd for data reading and writing, which would make things easier
+    as in later part of the code, we need to write and read huge
+    rasters. It will be super fast with a ssd.
+
+  - Load Libraries, global variables and functions.
+
+  - Set paths for files and folders to be read in the later part of the
+    code. Make updates to these paths, given your folder structure.
+    Also, do a sanity check on some of the variables (that might change
+    from one year to the next), e.g. `report_publishing_year` will
+    update every year.
+
+  - Load population raster and set its CRS to: “+proj=longlat
+    +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0”
+
+  - Crop population to the extent of the pollution raster’s extent.
+
+  - Load colormap shapefile (the latest one, which should be updated
+    every year, given border changes) and a rasterized version of the
+    colormap shapefile.
+
+  - Set crs of the colormap rasterized shapefile to be the same as the
+    population cropped pollution raster.
+
+  - For loop begins (process pollution data one year at a time):
+
+    - Read pollution raw raster for year number `i` and set its CRS to
+      be the same as the CRS of the population cropped pollution raster
+      (which is also the same as the rasterized cropped colormap
+      shapefile).
+
+    - Make population, pollution and rasterized colormap shapefile into
+      one raster brick.
+
+    - Convert raster brick into a dataframe.
+
+    - Write the high resolution raster brick using the arrow package in
+      a `.parquet` file format.
+
+    - Coerce the dataframe into an arrow table.
+
+    - Collapse the raster brick light into a gadm2 level file.
+
+    - Free memory
+
+  - Combine all pollution yearly datasets into a single gadm2 dataset.
+    Preserve this current version.
+
+  - Pin down the missing and NA pop regions by resampling all rasters in
+    the raster brick to a higher resolution (e.g. to 0.001 from
+    0.00833333).
+
+  - First create a dataset for na pop regions and then for missing
+    regions and preserve them as CSVs.
+
+  - Replace the na pop regions in the gadm2 collapsed file with the
+    subset of the na pop regions that have been filled in.
+
+  - Append the subset of the missing regions that have been filled in to
+    the gadm2 collapsed folder.
+
+  - At this point, we have a gadm level 2 file, which contains pollution
+    columns for all years and incorporates the filled in missing regions
+    and also the filled in NA pop regions.
+
+  - Update the national standards every year and read in the latest
+    national standards file. Replace the current national standards
+    column with the updated national standards column from this file.
+
+  - Add in the life years lost relative to the national standards and
+    who standard columns to the collapsed gadm2 file using colnames as
+    listed in the AQLI data dictionary (uploaded in the root of this
+    repository). If this changes in the future, this part of the code
+    would need to update. Save this as csv.
+
+  - Join the colormap shapefile with the gadm2 collapsed file and then
+    preserve the geom (shapefile) version.
+
+  - Collapse gadm2 to gadm0, write that as CSV (using the same column
+    name converntion as followed in the AQLI data dictionary) and then
+    write a shapefile version of it.
+
+  - Collapse gadm2 to gadm1, write that as CSV (using the same column
+    name converntion as followed in the AQLI data dictionary) and then
+    write a shapefile version of it.
+
+  - Make some final column name changes given the AQLI data dictionary.
+    End of pipeline.
+
+  - Rest of the code is not part of the main pipeline, but rather is a
+    repository of the experimentation and sanity checks on the final
+    datasets that I did on the data, post the pipeline is complete.
+    That’s it!!
