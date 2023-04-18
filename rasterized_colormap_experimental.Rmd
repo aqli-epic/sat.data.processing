@@ -311,6 +311,7 @@ aqli_gadm2_collapse <- aqli_raster_brick_light %>%
          pollution_pop_weighted = pop_weights*pm2.5_pollution) %>%
   dplyr::summarise(total_population = sum(population, na.rm = TRUE), 
             avg_pm2.5_pollution = sum(pollution_pop_weighted, na.rm = TRUE)) %>%
+  dplyr::ungroup() %>%
   dplyr::rename(objectid_gadm2 = colormap_objectid)
 
 # renaming the pollution column such that it includes the year in question
@@ -594,7 +595,8 @@ aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
   dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard, everything()) %>%
     dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
   dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
-    dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) 
+    dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard))
 
 # benchmarking
 threshold_13 <- Sys.time() 
@@ -656,6 +658,7 @@ aqli_gadm0_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
   dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
   dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
                    total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  dplyr::ungroup() %>%
   select(objectid_gadm2, iso_alpha3, country, total_population, whostandard, natstandard, dplyr::everything()) %>%
   dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
   dplyr::rename(population = total_population, 
@@ -668,7 +671,8 @@ aqli_gadm0_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
   dplyr::select(objectid_gadm0, iso_alpha3, country, population, whostandard, natstandard, dplyr::everything()) %>%
   dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
   dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
-   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) 
+   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard))
   
 
 # write the above (non-geometry version) of gadm0 master file to the collapsed/gadm0 folder (this version incorporates the na pop and missing regions, but only partially incoroporate ViT column name changes request). Full changes version as requested by ViT will be written at the end of this chunk for all 3 levels (both geom and non-geom versions)
@@ -735,6 +739,7 @@ aqli_gadm1_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
   dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
   dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
                    total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  dplyr::ungroup() %>%
   select(objectid_gadm2, iso_alpha3, country, name_1, total_population, whostandard, natstandard, dplyr::everything()) %>%
   dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
   dplyr::rename(population = total_population, 
@@ -747,7 +752,9 @@ aqli_gadm1_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
   dplyr::select(objectid_gadm1, iso_alpha3, country, name_1, population, whostandard, natstandard, dplyr::everything()) %>%
   dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
   dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
-   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) 
+   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard))
+  
   
 
 # write the above (non-geometry version) of gadm1 master file to the collapsed/gadm1 folder (this version incorporates the na pop and missing regions, but only partially incoroporate ViT column name changes request). Full changes version as requested by ViT will be written at the end of this chunk for all 3 levels (both geom and non-geom versions)
@@ -802,7 +809,6 @@ aqli_gadm1_collapse_from_gadm2_with_geom %>%
 
 #> For gadm 0, 1 and 2 write the final versions (non-geom version) of files, incorporating all remaining ViT column name changes/drop requests, add notes from the sticky notes (and then remove the sticky notes comment). Geom versions will work without ViT name restrictions as it is to be used internally, and wrap this up!!!.
 
-
 aqli_gadm2_collapse_master <- read_csv("D:/aqli.2023.report.data.share/2023.publish.Year.with.2021.data/collapsed/gadm_2/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_non_geom.csv")
 
 aqli_gadm1_collapse_from_gadm2 <- read_csv("D:/aqli.2023.report.data.share/2023.publish.Year.with.2021.data/collapsed/gadm_1/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_non_geom.csv")
@@ -810,23 +816,27 @@ aqli_gadm1_collapse_from_gadm2 <- read_csv("D:/aqli.2023.report.data.share/2023.
 aqli_gadm0_collapse_from_gadm2 <- read_csv("D:/aqli.2023.report.data.share/2023.publish.Year.with.2021.data/collapsed/gadm_0/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_non_geom.csv")
 
 
-# rename: country, name_1, name_2 AND remove iso_alpha3, natstandard, whostandard
+
+# rename: country, name_1, name_2 AND remove iso_alpha3, natstandard, whostandard (and adjusted natstandard column, which has now been incorporated in the above pipeline)
 aqli_gadm2_collapse_master %>%
   rename(name0 = country, name1 = name_1, name2 = name_2) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
   select(-c(iso_alpha3, natstandard, whostandard)) %>%
   readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "[finalizedApr2023]gadm2_aqli2021_vit.csv"))
 
-# rename: country, name_1 AND remove iso_alpha3, natstandard, whostandard AND replace the current objectid_gadm1 column (which is a grouped serial number) with actual row number wise global serial number, by using row_number() and ungroup(). This step should be taken care of in the above steps, when this dataset is begin created for the first time. Once incorporated there, remove it from here. I found out about it, when I reached this step and will replace it whenever I can.  
+# rename: country, name_1 AND remove iso_alpha3, natstandard, whostandard AND replace the current objectid_gadm1 column (which is a grouped serial number) with actual row number wise global serial number, by using row_number() and ungroup(). This step should be taken care of in the above steps, when this dataset is begin created for the first time. Once incorporated there, remove it from here. I found out about it, when I reached this step and will replace it whenever I can. Also adjusted natstandard column, which has now been incorporated in the above pipeline.
 aqli_gadm1_collapse_from_gadm2 %>%
   rename(name0 = country, name1 = name_1) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
   select(-c(iso_alpha3, natstandard, whostandard)) %>%
   ungroup() %>%
   mutate(objectid_gadm1 = row_number()) %>%
   readr::write_csv(str_c(ssd_location_collapsed_gadm1_data_path, "[finalizedApr2023]gadm1_aqli2021_vit.csv"))
 
-# rename country to name0 AND remove whostandard, also add an ungroup statement, when this dataset was created up top, to be safe.
+# rename country to name0 AND remove whostandard, also add an ungroup statement, when this dataset was created up top, to be safe. Also, adjusted natstandard column, which has now been incorporated in the above pipeline.
 aqli_gadm0_collapse_from_gadm2 %>%
   rename(name0 = country) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
   select(-c(whostandard)) %>%
   ungroup() %>%
   readr::write_csv(str_c(ssd_location_collapsed_gadm0_data_path, "[finalizedApr2023]gadm0_aqli2021_vit.csv"))
@@ -1242,15 +1252,15 @@ t6 <- Sys.time()
 # gadm2 level final shapefile test and plot map
 
 map1_global_aqli_color_scale_region_data <- aqli_gadm2_collapse_master_with_geom %>%
-  mutate(lyl_aqli_bucket = ifelse((llw2020 >= 0) & (llw2020 < 0.1), "0 - < 0.1 years", NA), 
-         lyl_aqli_bucket = ifelse((llw2020 >= 0.1) & (llw2020 < 0.5), "0.1 - < 0.5", lyl_aqli_bucket), 
-         lyl_aqli_bucket = ifelse((llw2020 >= 0.5) & (llw2020 < 1), "0.5 - < 1", lyl_aqli_bucket), 
-         lyl_aqli_bucket = ifelse((llw2020 >= 1) & (llw2020 < 2), "1 - < 2", lyl_aqli_bucket), 
-         lyl_aqli_bucket = ifelse((llw2020 >= 2) & (llw2020 < 3), "2 - < 3", lyl_aqli_bucket), 
-         lyl_aqli_bucket = ifelse((llw2020 >= 3) & (llw2020 < 4), "3 - < 4", lyl_aqli_bucket), 
-         lyl_aqli_bucket = ifelse((llw2020 >= 4) & (llw2020 < 5), "4 - < 5", lyl_aqli_bucket), 
-         lyl_aqli_bucket = ifelse((llw2020 >= 5) & (llw2020 < 6), "5 - < 6", lyl_aqli_bucket), 
-         lyl_aqli_bucket = ifelse((llw2020 >= 6), ">= 6 years", lyl_aqli_bucket)) %>%
+  mutate(lyl_aqli_bucket = ifelse((w2021 >= 0) & (w2021 < 0.1), "0 - < 0.1 years", NA), 
+         lyl_aqli_bucket = ifelse((w2021 >= 0.1) & (w2021 < 0.5), "0.1 - < 0.5", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((w2021 >= 0.5) & (w2021 < 1), "0.5 - < 1", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((w2021 >= 1) & (w2021 < 2), "1 - < 2", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((w2021 >= 2) & (w2021 < 3), "2 - < 3", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((w2021 >= 3) & (w2021 < 4), "3 - < 4", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((w2021 >= 4) & (w2021 < 5), "4 - < 5", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((w2021 >= 5) & (w2021 < 6), "5 - < 6", lyl_aqli_bucket), 
+         lyl_aqli_bucket = ifelse((w2021 >= 6), ">= 6 years", lyl_aqli_bucket)) %>%
   mutate(order_var = ifelse(lyl_aqli_bucket == "0 - < 0.1 years", 1, NA), 
          order_var = ifelse(lyl_aqli_bucket == "0.1 - < 0.5", 2, order_var), 
          order_var = ifelse(lyl_aqli_bucket == "0.5 - < 1", 3, order_var), 
@@ -1262,8 +1272,7 @@ map1_global_aqli_color_scale_region_data <- aqli_gadm2_collapse_master_with_geom
          order_var = ifelse(lyl_aqli_bucket == ">= 6 years", 9, order_var)) 
 
 # map1
-map1_global_aqli_color_scale_region_data %>%
-  filter(country == "United States", name1 %notin% c("Alaska")) %>%
+map1_global_aqli_color_scale_updated_April102023 <- map1_global_aqli_color_scale_region_data %>%
   ggplot() +
   geom_sf(mapping = aes(fill = lyl_aqli_bucket), color = "transparent") +
   scale_fill_manual(values = c("0 - < 0.1 years" = "#FFFFFF", "0.1 - < 0.5" = "#FFE6B3", "0.5 - < 1" = "#FFD25D", 
@@ -1277,7 +1286,7 @@ map1_global_aqli_color_scale_region_data %>%
         plot.background = element_rect(fill = "aliceblue")) +
     guides(fill = guide_legend(nrow = 1)) 
 
-ggsave(filename = "./experimentation/test_aqli_global_2021_map.pdf", plot = map1_global_aqli_color_scale, height = 14, width = 14)
+ggsave(filename = "./aqli_global_2021_map_april102023_final.pdf", plot = map1_global_aqli_color_scale_updated_April102023, height = 14, width = 14)
 
 # map2
 
@@ -1320,21 +1329,21 @@ df_test <- tibble(latitude = lat, longitude = lon, pm2.5 = pol_2018_0.01_test_df
 
 #- Comparing population column of color_2020 with the 2021 color file (gadm2)
 
-# 2020 aqli data
-color_2020 <- read_csv("C:/Users/Aarsh/Desktop/aqli_2020_data/color_2020.csv")
+# 2020 aqli data (read in the aqli dataset with which you want to compare the latest AQLI dataset)
+color_2020 <- read_csv("./experimentation/color_2020.csv")
 
-# 2021 aqli datasets
-aqli_gadm2_collapse_master <- read_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom_Jan192023.csv"))
-
-aqli_gadm0_collapse_from_gadm2 <- read_csv(str_c(ssd_location_collapsed_gadm0_data_path, "master_global_allyears_gadm0_non_geom_Jan192023.csv"))
-
-aqli_gadm1_collapse_from_gadm2 <- read_csv(str_c(ssd_location_collapsed_gadm1_data_path, "master_global_allyears_gadm1_non_geom_Jan192023.csv"))
+# 2021 aqli datasets (read in the latest available aqli dataset)
+# aqli_gadm2_collapse_master <- read_csv(str_c(ssd_location_collapsed_gadm2_data_path, "master_global_allyears_gadm2_non_geom_Jan192023.csv"))
+# 
+# aqli_gadm0_collapse_from_gadm2 <- read_csv(str_c(ssd_location_collapsed_gadm0_data_path, "master_global_allyears_gadm0_non_geom_Jan192023.csv"))
+# 
+# aqli_gadm1_collapse_from_gadm2 <- read_csv(str_c(ssd_location_collapsed_gadm1_data_path, "master_global_allyears_gadm1_non_geom_Jan192023.csv"))
 
 # joining 2020 gadm2 dataset with 2021 gadm2 dataset and comparing the population column
 gadm2_2020_2021_pop_compare <- color_2020 %>% # 46702 rows
   select(country, name_1, name_2, population) %>%
   rename(population_old = population) %>%
-  left_join(aqli_gadm2_collapse_master %>% select(country, name_1, name_2, population))
+  left_join(aqli_gadm2_collapse_master %>% select(country, name_1, name_2, population), by = c("country", "name_1", "name_2"))
 
 # looking at a subset that contains only those rows in which we have a population number for both 2021 and 2020 data
 gadm2_2020_2021_pop_compare_sub <- gadm2_2020_2021_pop_compare %>% # 42679 rows
@@ -1346,16 +1355,26 @@ gadm2_2020_2021_pop_compare_sub <- gadm2_2020_2021_pop_compare_sub %>%
 
 # For places, where population has decreased, plotting a distribution of abs(pop_diff). It seems like at max population has decreased by 10^5. Note that there were many border changes and regrouping of regions and shapefile updates. I personally don't think that its unreasonable. But still check
 plt <- gadm2_2020_2021_pop_compare_sub %>%
-  filter(pop_diff < 0) %>%
+filter(pop_diff < 0) %>%
   mutate(pop_diff_abs = abs(pop_diff)) %>%
   ggplot() +
-  geom_density(mapping = aes(x = log10(pop_diff_abs)), color = "black")
+  geom_density(mapping = aes(x = log10(pop_diff)), color = "black")
 
 # comparing population distribution of color_2020 with color_2021
 plt <- gadm2_2020_2021_pop_compare_sub %>%
   ggplot() +
   geom_histogram(mapping = aes(x = log10(population)), color = "white", fill = "cornflowerblue", alpha = 0.3) + 
-  geom_histogram(mapping = aes(x = log10(population_old)), color = "white", fill = "red", alpha = 0.3)
+  geom_histogram(mapping = aes(x = log10(population_old)), color = "white", fill = "red", alpha = 0.3) +
+  ggtitle("Population difference distribution (pop 2021 - pop 2020)") +
+  ggthemes::theme_clean()
+
+# hist
+plt <- gadm2_2020_2021_pop_compare_sub %>%
+  ggplot() +
+  geom_histogram(mapping = aes(x = pop_diff), color = "white") +
+  scale_y_log10() + 
+    ggtitle("Population difference distribution (pop 2021 - pop 2020)") +
+  ggthemes::theme_clean()
 
 #> check if any place (at gadm2/1/0) has a population of 0, yes: 97 places
 pop_0_gadm2_regions <- aqli_gadm2_collapse_master %>%   # 97 regions
@@ -1378,10 +1397,10 @@ color_2020 %>%
 # compare pm2.5 pollution distribution for 2020 v/s 2021 pollution data
 
 plt <- color_2020 %>%
-  filter(country == "Germany") %>%
+  filter(country == "United States") %>%
   ggplot() +
   geom_histogram(mapping = aes(x = pm2020), fill = "cornflowerblue", color = "white", alpha = 0.3) +
-  geom_histogram(data = aqli_gadm2_collapse_master %>% filter(country == "Germany"), mapping = aes(x = pm2020), fill = "red", color = "white", alpha = 0.3) 
+  geom_histogram(data = aqli_gadm2_collapse_master %>% filter(country == "United States"), mapping = aes(x = pm2020), fill = "red", color = "white", alpha = 0.3) 
 
 # in places where there is 0 population at gadm level 2, is there pollution data available in the 2021 file and also in 2020 file. Answer: in 2020 it is available, but in 2021 no, because it probably was available, but went away when population weighting happened.
 
@@ -1401,9 +1420,39 @@ unique(colormap$NAME_0)[rel_ind]
 
 #> plot timeseries/heatmap of last 24 years country wise and compare with old data counterpart heatmaps
  
+country_graph <- "Pakistan"
+
 #> trendlines, country wise compare 2020 v/s 2021 data
-plt0_us <- color_2020 %>%
-  filter(country == "United States") %>%
+plt1_region <- aqli_gadm2_collapse_master %>%
+  filter(country == country_graph) %>%
+  mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         mutate(across(starts_with("pm"), ~.x*pop_weights, .names = "{col}_weighted"))) %>%
+  summarise(across(ends_with("weighted"), sum)) %>%
+  pivot_longer(cols = pm1998_weighted:pm2021_weighted, names_to = "years", 
+               values_to = "pop_weighted_avg_pm2.5") %>%
+  mutate(years = as.integer(unlist(str_extract(years, "\\d+"))), 
+         region = "National Average") %>% 
+  select(years, region, pop_weighted_avg_pm2.5) %>%
+  ggplot() +
+  geom_line(mapping = ggplot2::aes(x = as.integer(years), y = as.double(pop_weighted_avg_pm2.5)), lwd = 1.1, 
+            color = "darkred") +
+scale_y_continuous(breaks = seq(0, 60, 5), limits = c(0, 60)) +
+  scale_x_continuous(breaks = seq(1998, 2020, 2))  +
+  ggthemes::theme_clean() +
+  labs(x = "Years", 
+       y = expression(paste("Average PM2.5 concentration ( ", mu, "g", "/", m^3, " )")), 
+       title = str_c("PM2.5 Pollution trend 1998 to 2021 (", country_graph, ")" )) +
+  theme(legend.position = "bottom", legend.title = element_blank(), 
+        legend.text = element_text(size = 7), 
+        axis.title.y = element_text(size = 9), 
+        axis.title.x = element_text(size = 9), 
+        axis.text.x = element_text(size = 6), 
+        axis.text.y = element_text(size = 6)) 
+  # geom_text(x = 2002.8, y = 8.7, label = expression(paste("WHO PM2.5 Guideline (last updated: 2021): 5 ", mu, "g","/", m^3, "")))
+
+
+plt0_region <- color_2020 %>%
+  filter(country == country_graph) %>%
   mutate(pop_weights = population/sum(population, na.rm = TRUE), 
          mutate(across(starts_with("pm"), ~.x*pop_weights, .names = "{col}_weighted"))) %>%
   summarise(across(ends_with("weighted"), sum)) %>%
@@ -1415,21 +1464,20 @@ plt0_us <- color_2020 %>%
   ggplot() +
   geom_line(mapping = ggplot2::aes(x = as.integer(years), y = as.double(pop_weighted_avg_pm2.5)), lwd = 1.1, 
             color = "darkred") +
-  scale_y_continuous(breaks = seq(0, 20, 5), limits = c(0, 20)) +
+scale_y_continuous(breaks = seq(0, 60, 5), limits = c(0, 60)) +
   scale_x_continuous(breaks = seq(1998, 2020, 2))  +
   ggthemes::theme_clean() +
   labs(x = "Years", 
        y = expression(paste("Average PM2.5 concentration ( ", mu, "g", "/", m^3, " )")), 
-       title = "PM2.5 Pollution trend 1998 to 2020 (United States)") +
+       title = str_c("PM2.5 Pollution trend 1998 to 2020 (", country_graph, ")" )) +
   theme(legend.position = "bottom", legend.title = element_blank(), 
         legend.text = element_text(size = 7), 
         axis.title.y = element_text(size = 9), 
         axis.title.x = element_text(size = 9), 
         axis.text.x = element_text(size = 6), 
         axis.text.y = element_text(size = 6)) 
-  # geom_text(x = 2002.8, y = 8.7, label = expression(paste("WHO PM2.5 Guideline (last updated: 2021): 5 ", mu, "g","/", m^3, "")))
 
-plt_us <- grid.arrange(plt0_us, plt1_us, nrow = 1)
+plt_region <- grid.arrange(plt0_region, plt1_region, nrow = 1)
  
 #> heatmap continent wise
 
@@ -1442,6 +1490,17 @@ color_2020 <- color_2020 %>%
 aqli_gadm2_collapse_master_continent <-  aqli_gadm2_collapse_master %>%
   left_join(country_continent, by = c("country"))
 
+country_wise_pm2.5_average_2020_data <- color_2020  %>%
+  filter(continent == "Africa") %>%
+  group_by(country) %>%
+  mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         mutate(across(starts_with("pm"), ~.x*pop_weights, .names = "{col}_weighted"))) %>%
+  summarise(across(ends_with("weighted"), sum)) %>%
+  pivot_longer(cols = pm1998_weighted:pm2020_weighted, names_to = "years", 
+               values_to = "pop_weighted_avg_pm2.5") %>%
+  mutate(years = as.integer(unlist(str_extract(years, "\\d+"))), 
+         region = "National Average") %>% 
+  arrange(pop_weighted_avg_pm2.5) 
 
 country_wise_pm2.5_average <- aqli_gadm2_collapse_master_continent  %>%
   filter(continent == "Africa") %>%
@@ -1455,8 +1514,7 @@ country_wise_pm2.5_average <- aqli_gadm2_collapse_master_continent  %>%
          region = "National Average") %>% 
   arrange(pop_weighted_avg_pm2.5) 
 
-heatmap_africa_2021 <- country_wise_pm2.5_average %>%
-  filter(country %in% c("Democratic Republic of the Congo", 
+africa_countries_sample <- c("Democratic Republic of the Congo", 
                         "Rwanda", 
                         "Burundi", 
                         "Cameroon", 
@@ -1470,7 +1528,29 @@ heatmap_africa_2021 <- country_wise_pm2.5_average %>%
                         "Egypt", 
                         "Libya",
                         "Niger", 
-                        "Mauritius")) %>%
+                        "Mauritius")
+
+
+asia_countries_sample <- c("India", "China", "Indonesia", "Pakistan", "Afghanistan", "Myanmar", "Brunei")
+
+heatmap_region_2020 <- country_wise_pm2.5_average_2020_data %>%
+  filter(country %in% africa_countries_sample) %>%
+  mutate(le_lost = (pop_weighted_avg_pm2.5 - 5)*0.098, 
+         le_lost = ifelse(le_lost < 0, 0, le_lost)) %>%
+  ggplot() +
+  geom_raster(mapping = aes(x = years, y = fct_reorder(country, pop_weighted_avg_pm2.5), fill = pop_weighted_avg_pm2.5)) +
+   scale_fill_viridis_b(option = "rocket", direction = -1) +
+  scale_x_continuous(breaks = seq(1998, 2020, 1)) +
+  labs(x = "Years", y = "", fill = "PM2.5 pollution (µg/m³)", caption = str_wrap("*This graph displays the life years lost relative to the WHO PM2.5 guideline in all countries of the African continent (from 1998 to 2020)")) +
+  ggthemes::theme_hc() +
+  theme(axis.text.x = element_text(size = 5), 
+        axis.text.y = element_text(size = 7)) 
+
+
+
+
+heatmap_region_2021 <- country_wise_pm2.5_average %>%
+  filter(country %in% africa_countries_sample) %>%
   mutate(le_lost = (pop_weighted_avg_pm2.5 - 5)*0.098, 
          le_lost = ifelse(le_lost < 0, 0, le_lost)) %>%
   ggplot() +
@@ -1482,8 +1562,7 @@ heatmap_africa_2021 <- country_wise_pm2.5_average %>%
   theme(axis.text.x = element_text(size = 5), 
         axis.text.y = element_text(size = 7)) 
 
-heatmap_africa_final <- grid.arrange(heatmap_africa_2020, heatmap_africa_2021, nrow = 1)
-
+heatmap_region_final <- grid.arrange(heatmap_region_2020, heatmap_region_2021, nrow = 1)
 #> More sanity checks on the llpp columns calculations
 
 
