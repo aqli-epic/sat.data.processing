@@ -816,29 +816,34 @@ aqli_gadm1_collapse_from_gadm2 <- read_csv("D:/aqli.2023.report.data.share/2023.
 aqli_gadm0_collapse_from_gadm2 <- read_csv("D:/aqli.2023.report.data.share/2023.publish.Year.with.2021.data/collapsed/gadm_0/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_non_geom.csv")
 
 
-
 # rename: country, name_1, name_2 AND remove iso_alpha3, natstandard, whostandard (and adjusted natstandard column, which has now been incorporated in the above pipeline)
-aqli_gadm2_collapse_master %>%
+aqli_gadm2_collapse_master_finalized <- aqli_gadm2_collapse_master %>%
   rename(name0 = country, name1 = name_1, name2 = name_2) %>%
   dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
-  select(-c(iso_alpha3, natstandard, whostandard)) %>%
+  select(-c(iso_alpha3, natstandard, whostandard)) 
+
+aqli_gadm2_collapse_master_finalized %>%
   readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "[finalizedApr2023]gadm2_aqli2021_vit.csv"))
 
 # rename: country, name_1 AND remove iso_alpha3, natstandard, whostandard AND replace the current objectid_gadm1 column (which is a grouped serial number) with actual row number wise global serial number, by using row_number() and ungroup(). This step should be taken care of in the above steps, when this dataset is begin created for the first time. Once incorporated there, remove it from here. I found out about it, when I reached this step and will replace it whenever I can. Also adjusted natstandard column, which has now been incorporated in the above pipeline.
-aqli_gadm1_collapse_from_gadm2 %>%
+aqli_gadm1_collapse_from_gadm2_finalized <- aqli_gadm1_collapse_from_gadm2 %>%
   rename(name0 = country, name1 = name_1) %>%
   dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
   select(-c(iso_alpha3, natstandard, whostandard)) %>%
   ungroup() %>%
-  mutate(objectid_gadm1 = row_number()) %>%
+  mutate(objectid_gadm1 = row_number()) 
+
+aqli_gadm1_collapse_from_gadm2_finalized %>%
   readr::write_csv(str_c(ssd_location_collapsed_gadm1_data_path, "[finalizedApr2023]gadm1_aqli2021_vit.csv"))
 
 # rename country to name0 AND remove whostandard, also add an ungroup statement, when this dataset was created up top, to be safe. Also, adjusted natstandard column, which has now been incorporated in the above pipeline.
-aqli_gadm0_collapse_from_gadm2 %>%
+aqli_gadm0_collapse_from_gadm2_finalized <- aqli_gadm0_collapse_from_gadm2 %>%
   rename(name0 = country) %>%
   dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
   select(-c(whostandard)) %>%
-  ungroup() %>%
+  ungroup() 
+
+aqli_gadm0_collapse_from_gadm2_finalized %>%
   readr::write_csv(str_c(ssd_location_collapsed_gadm0_data_path, "[finalizedApr2023]gadm0_aqli2021_vit.csv"))
 
 
@@ -849,7 +854,76 @@ end_time_vit_data_pipeline <- Sys.time()
 print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " minutes?"))
 ```
 
+# Politically Sensitive Regions (final step)
 
+```{r eval=FALSE, include=FALSE}
+#> create a India point of view gadm2 file---------------------------
+
+# read in the finalized files for 2023 shared with ViT in April, 2023 (if running the pipeline, from scratch - use the)
+
+aqli_gadm2_collapse_master_finalized <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm2_aqli2021_vit.csv")
+
+aqli_gadm1_collapse_from_gadm2_finalized <-
+  read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm1_aqli2021_vit.csv")
+
+aqli_gadm0_collapse_from_gadm2_finalized <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm0_aqli2021_vit.csv")
+
+# gilgit baltistan
+gilgit_baltistan <- aqli_gadm2_collapse_master_finalized %>%
+  filter(name0 == "Pakistan", name1 == "Gilgit Baltistan") %>%
+  mutate(name0 == "India") 
+
+# Azad Kashmir
+azad_kashmir <- aqli_gadm2_collapse_master_finalized %>%
+  filter(name0 == "India", name1 == "Azad Kashmir") %>%
+  mutate(name0 == "India")
+
+# India politically sensitve regions gadm2 file
+aqli_gadm2_collapse_master_finalized_india_pov <- aqli_gadm2_collapse_master_finalized %>%
+  filter(name1 %notin% c("Azad Kashmir", "Gilgit Baltistan")) %>%
+  bind_rows(gilgit_baltistan) %>%
+  bind_rows(azad_kashmir)
+
+#> create China point of view gadm2 file----------------------------
+
+# arunachal pradesh, gadm1
+andhra_pradesh <- aqli_gadm2_collapse_master_finalized %>%
+  filter(name0 == "India", name1 == "Arunachal Pradesh") %>%
+  mutate(name0 == "China")
+
+# taiwan, gadm0 shift to "China"
+taiwan_to_china <- aqli_gadm2_collapse_master_finalized %>%
+  filter(name0 == "Taiwan") %>%
+  mutate(name0 == "China")
+
+# hong kong
+hong_kong <- aqli_gadm2_collapse_master_finalized %>%
+  filter(name1 == "Hong Kong") %>%
+  mutate(name0 == "China")
+
+# Macau
+macau <- aqli_gadm2_collapse_master_finalized %>%
+  filter(name1 == "Macau") %>%
+  mutate(name0 == "China")
+
+# China politcially sensitive regions file
+aqli_gadm2_collapse_master_finalized_china_pov <- aqli_gadm2_collapse_master_finalized %>%
+  filter(name1 %notin%  "Andhra Pradesh", name0 %notin% "Taiwan", )
+
+
+```
+
+
+
+#> Main pipeline ends here---------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+#> Sanity checks and other independent tests----------------------------------------------------------------------------------------
 
 #> Capturing the missing pollution regions and the NA population regions that were left out in the process above because there tiny size.---------------------------------------
 
@@ -1103,28 +1177,6 @@ gadm1_aqli_2021_with_added_regions <- gadm2_aqli_2021_with_added_regions %>%
 
 ```
 
-# Politically Sensitive Regions
-
-```{r eval=FALSE, include=FALSE}
-#> create a India point of view gadm2 file
-
-# gilgit baltistan
-gilgit_baltistan <- gadm2_aqli_2021_with_added_regions %>%
-  filter(country == "Pakistan", name_1 == "Gilgit Baltistan") %>%
-  mutate(country == "India") 
-
-# Azad Kashmir
-azad_kashmir <- gadm2_aqli_2021_with_added_regions %>%
-  filter(country == "India", name_1 == "Azad Kashmir") %>%
-  mutate(country == "India")
-
-# India politically sensitve regions gadm2 file
-gadm2_aqli_2021_with_added_regions %>%
-  filter(name_1 %notin% c("Azad Kashmir", "Gilgit Baltistan")) %>%
-  bind_rows(gilgit_baltistan) %>%
-  bind_rows(azad_kashmir)
-
-```
 
 # Sanity checks area (deactivated for now)
 ```{r sanity_checks, eval=FALSE, include=FALSE}
