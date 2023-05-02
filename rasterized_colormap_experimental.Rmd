@@ -1263,6 +1263,110 @@ aqli_gadm0_collapse_from_gadm2_finalized_china_pov_vit <- aqli_gadm0_collapse_fr
 
 ```{r}
 
+# (1.1) [name1/China] region of Hong Kong is removed and added as a new country (name0) and all its name2 regions
+# now become name1 regions of the new country (Hong Kong). All name2 regions of the newly created country Hong Kong are
+# now labelled as NA. (assumed that the newly created Hong Kong has the same natstandard as China )
+
+hong_kong_reassigned <- aqli_gadm2_collapse_master_finalized %>%
+  filter(country == "China", name_1 == "Hong Kong") %>%
+  mutate(country = "Hong Kong", name_1 = name_2, name_2 = NA, iso_alpha3 = "HKG")
+
+aqli_gadm2_collapse_master_finalized_tmp <- aqli_gadm2_collapse_master_finalized %>%
+  filter(!((country == "China") & (name_1 == "Hong Kong"))) %>%
+  bind_rows(hong_kong_reassigned)
+ 
+  
+# (1.2) [name1/China] region of Macau is removed and added as a new country (name0) and all its name2 regions
+# now become name1 regions of the new country (Macau). All name2 regions of the newly created country Macau are 
+# now labelled as NA. Assumed that the newly created Macau has the same natstandard as China.
+
+macau_reassigned <- aqli_gadm2_collapse_master_finalized %>%
+  filter(country == "China", name_1 == "Macau") %>%
+  mutate(country = "Macau", name_1 = name_2, name_2 = NA, iso_alpha3 = "MAC")
+ 
+aqli_gadm2_collapse_master_finalized_pakistan_pov <- aqli_gadm2_collapse_master_finalized_tmp %>%
+  filter(!((country == "China") & (name_1 == "Macau"))) %>%
+  bind_rows(macau_reassigned)
+
+#> (2) After all of the above above changes to gadm2 fille, create a new objectid_gadm2 column, which will simply be the serial number, once done, the gadm2 Pakistan POV file is ready. Then, collapse the gadm2 Pakistan POV file to gadm1 and gadm0, to get the corresponding gadm1 Pakistan POV and gadm0 Pakistan POV (in doing so also change the column names to what's requested by ViT). Finally, change the column names of all 3 levels to what's requested by ViT.
+
+
+# assigining a serial number column to gadm2 pakistan pov file
+aqli_gadm2_collapse_master_finalized_pakistan_pov <- aqli_gadm2_collapse_master_finalized_pakistan_pov %>%
+  mutate(objectid_gadm2 = row_number())
+
+
+# collapsing gadm2 india pov to gadm0 pakistan pov
+aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov <- aqli_gadm2_collapse_master_finalized_pakistan_pov %>%
+  dplyr::group_by(country) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+  dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+  dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                   total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  dplyr::ungroup() %>%
+  select(objectid_gadm2, iso_alpha3, country, total_population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+  dplyr::rename(population = total_population, 
+                objectid_gadm0 = objectid_gadm2) %>%
+  dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+    dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm0, iso_alpha3, country, population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
+   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard))
+
+
+# collapsing gadm2 india pov to gadm1 pakistan pov
+aqli_gadm1_collapse_from_gadm2_finalized_pakistan_pov <-  aqli_gadm2_collapse_master_finalized_pakistan_pov %>%
+  dplyr::group_by(country, name_1) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+  dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+  dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                   total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  dplyr::ungroup() %>%
+  select(objectid_gadm2, iso_alpha3, country, name_1, total_population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+  dplyr::rename(population = total_population, 
+                objectid_gadm1 = objectid_gadm2) %>%
+  dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+    dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm1, iso_alpha3, country, name_1, population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
+   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard))
+
+## change names to as requested by ViT
+
+# gadm2, rename: country, name_1, name_2 AND remove iso_alpha3, natstandard, whostandard
+
+aqli_gadm2_collapse_master_finalized_pakistan_pov_vit <- aqli_gadm2_collapse_master_finalized_pakistan_pov %>%
+  rename(name0 = country, name1 = name_1, name2 = name_2) %>%
+  select(-c(iso_alpha3, natstandard, whostandard)) 
+
+# gadm1, rename: country, name_1 AND remove iso_alpha3, natstandard, whostandard
+
+aqli_gadm1_collapse_from_gadm2_finalized_pakistan_pov_vit <- aqli_gadm1_collapse_from_gadm2_finalized_pakistan_pov %>%
+  rename(name0 = country, name1 = name_1) %>%
+  select(-c(iso_alpha3, natstandard, whostandard)) 
+
+# gadm0, rename country to name0 AND remove whostandard
+
+aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov_vit <- aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov %>%
+  rename(name0 = country) %>%
+  select(-c(whostandard)) 
+
+# export anti joined files for ViT
+
+
+
 
 
 ```
