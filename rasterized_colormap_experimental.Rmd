@@ -132,6 +132,12 @@ missing_regions_folder_name <- "missing_gadm2_regions_resamp_to_0.001_processed"
 
 missing_regions_folder_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", missing_regions_folder_name , "/", sep  = "")
 
+#> pov files folder path
+
+pov_files_folder_name <- "pov_files"
+
+pov_files_folder_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", pov_files_folder_name , "/", sep  = "")
+
 #-------------------------------------------------
 
 ```
@@ -857,7 +863,7 @@ print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " mi
 # Politically Sensitive Regions (final step)
 
 ```{r eval=FALSE, include=FALSE}
-#> read in the finalized files for 2023 shared with ViT in April, 2023 (if running the pipeline, from scratch - use the)----------
+#> read in the finalized files for 2023 shared with ViT (but partial AQLI colnames) in April, 2023 (if running the pipeline, from scratch - use the)----------
 
 aqli_gadm2_collapse_master_finalized <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_non_geom.csv")
 
@@ -865,6 +871,12 @@ aqli_gadm1_collapse_from_gadm2_finalized <-
   read_csv("./ar.2023.update.using.2021.pol.data/data/output/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_non_geom.csv")
 
 aqli_gadm0_collapse_from_gadm2_finalized <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_non_geom.csv")
+
+#> read in the final files shared with ViT in April 2023 (with ViT colnames)----------------
+
+vit_final_gadm2 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm2_aqli2021_vit.csv")
+vit_final_gadm1 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm1_aqli2021_vit.csv")
+vit_final_gadm0 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm0_aqli2021_vit.csv")
 
 ### Executing steps from this (https://docs.google.com/spreadsheets/d/1ord7VYujSBuB_AuMJT5Kg9TQCyvhsvB4f0jsdnyI_Ss/edit#gid=1445767875)
 ### google sheet's Column D to get an India pov file.
@@ -1038,9 +1050,23 @@ aqli_gadm0_collapse_from_gadm2_finalized_india_pov_vit <- aqli_gadm0_collapse_fr
   rename(name0 = country) %>%
   select(-c(whostandard)) 
 
-# export anti joined files for ViT
-  
 
+
+#> export anti joined files for ViT for each level for India pov---------------
+
+# gadm2
+added_rows_gadm2_india_pov <- anti_join(aqli_gadm2_collapse_master_finalized_india_pov_vit, vit_final_gadm2, by = c("name0", "name1", "name2"))
+deleted_rows_gadm2_india_pov <- anti_join(vit_final_gadm2, aqli_gadm2_collapse_master_finalized_india_pov_vit, by = c("name0", "name1", "name2"))
+
+# gadm1
+added_rows_gadm1_india_pov <- anti_join(aqli_gadm1_collapse_from_gadm2_finalized_india_pov_vit, vit_final_gadm1, by = c("name0", "name1"))
+deleted_rows_gadm1_india_pov <- anti_join(vit_final_gadm1, aqli_gadm1_collapse_from_gadm2_finalized_india_pov_vit, by = c("name0", "name1"))
+
+# gadm0
+added_rows_gadm0_india_pov <- anti_join(aqli_gadm0_collapse_from_gadm2_finalized_india_pov_vit, vit_final_gadm0, by = c("name0"))
+deleted_rows_gadm0_india_pov <- anti_join(vit_final_gadm0, aqli_gadm0_collapse_from_gadm2_finalized_india_pov_vit, by = c("name0")) # 0
+
+  
 ```
 
 
@@ -1253,7 +1279,19 @@ aqli_gadm0_collapse_from_gadm2_finalized_china_pov_vit <- aqli_gadm0_collapse_fr
   rename(name0 = country) %>%
   select(-c(whostandard)) 
 
-# export anti joined files for ViT
+#> export anti joined files for ViT for each level for China pov---------------
+
+# gadm2
+added_rows_gadm2_china_pov <- anti_join(aqli_gadm2_collapse_master_finalized_china_pov_vit, vit_final_gadm2, by = c("name0", "name1", "name2"))
+deleted_rows_gadm2_china_pov <- anti_join(vit_final_gadm2, aqli_gadm2_collapse_master_finalized_china_pov_vit, by = c("name0", "name1", "name2"))
+
+# gadm1
+added_rows_gadm1_china_pov <- anti_join(aqli_gadm1_collapse_from_gadm2_finalized_china_pov_vit, vit_final_gadm1, by = c("name0", "name1"))
+deleted_rows_gadm1_china_pov <- anti_join(vit_final_gadm1, aqli_gadm1_collapse_from_gadm2_finalized_china_pov_vit, by = c("name0", "name1"))
+
+# gadm0
+added_rows_gadm0_china_pov <- anti_join(aqli_gadm0_collapse_from_gadm2_finalized_china_pov_vit, vit_final_gadm0, by = c("name0"))
+deleted_rows_gadm0_china_pov <- anti_join(vit_final_gadm0, aqli_gadm0_collapse_from_gadm2_finalized_china_pov_vit, by = c("name0")) # 0
 
 
 
@@ -1363,8 +1401,20 @@ aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov_vit <- aqli_gadm0_collapse
   rename(name0 = country) %>%
   select(-c(whostandard)) 
 
-# export anti joined files for ViT
 
+#> export anti joined files for ViT for each level for Pakistan pov---------------
+
+# gadm2
+added_rows_gadm2_pakistan_pov <- anti_join(aqli_gadm2_collapse_master_finalized_pakistan_pov_vit, vit_final_gadm2, by = c("name0", "name1", "name2"))
+deleted_rows_gadm2_pakistan_pov <- anti_join(vit_final_gadm2, aqli_gadm2_collapse_master_finalized_pakistan_pov_vit, by = c("name0", "name1", "name2"))
+
+# gadm1
+added_rows_gadm1_pakistan_pov <- anti_join(aqli_gadm1_collapse_from_gadm2_finalized_pakistan_pov_vit, vit_final_gadm1, by = c("name0", "name1"))
+deleted_rows_gadm1_pakistan_pov <- anti_join(vit_final_gadm1, aqli_gadm1_collapse_from_gadm2_finalized_pakistan_pov_vit, by = c("name0", "name1"))
+
+# gadm0
+added_rows_gadm0_pakistan_pov <- anti_join(aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov_vit, vit_final_gadm0, by = c("name0"))
+deleted_rows_gadm0_pakistan_pov <- anti_join(vit_final_gadm0, aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov_vit, by = c("name0")) 
 
 
 
@@ -1478,6 +1528,22 @@ aqli_gadm0_collapse_from_gadm2_finalized_rotw_pov_vit <- aqli_gadm0_collapse_fro
 
 # export anti joined files for ViT
 
+aqli_gadm2_collapse_master_finalized_rotw_pov_vit %>% 
+  write_csv(str_c(pov_files_folder_path, "rotw/", "[May2023]gadm2_aqli_2021_rotw_pov_usingViTColnamesCompletely.csv"))
+
+#> export anti joined files for ViT for each level for rotw pov---------------
+
+# gadm2
+added_rows_gadm2_rotw_pov <- anti_join(aqli_gadm2_collapse_master_finalized_rotw_pov_vit, vit_final_gadm2, by = c("name0", "name1", "name2"))
+deleted_rows_gadm2_rotw_pov <- anti_join(vit_final_gadm2, aqli_gadm2_collapse_master_finalized_rotw_pov_vit, by = c("name0", "name1", "name2"))
+
+# gadm1
+added_rows_gadm1_rotw_pov <- anti_join(aqli_gadm1_collapse_from_gadm2_finalized_rotw_pov_vit, vit_final_gadm1, by = c("name0", "name1"))
+deleted_rows_gadm1_rotw_pov <- anti_join(vit_final_gadm1, aqli_gadm1_collapse_from_gadm2_finalized_rotw_pov_vit, by = c("name0", "name1"))
+
+# gadm0
+added_rows_gadm0_rotw_pov <- anti_join(aqli_gadm0_collapse_from_gadm2_finalized_rotw_pov_vit, vit_final_gadm0, by = c("name0"))
+deleted_rows_gadm0_rotw_pov <- anti_join(vit_final_gadm0, aqli_gadm0_collapse_from_gadm2_finalized_rotw_pov_vit, by = c("name0")) 
 
 
 
