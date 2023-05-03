@@ -878,6 +878,16 @@ vit_final_gadm2 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[f
 vit_final_gadm1 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm1_aqli2021_vit.csv")
 vit_final_gadm0 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm0_aqli2021_vit.csv")
 
+# removing objectid columns from each vit_final files for later "anti-joining".
+vit_final_gadm2 <- vit_final_gadm2 %>%
+  select(-objectid_gadm2)
+
+vit_final_gadm1 <- vit_final_gadm1 %>%
+  select(-objectid_gadm1)
+
+vit_final_gadm0 <- vit_final_gadm0 %>%
+  select(-objectid_gadm0)
+
 ### Executing steps from this (https://docs.google.com/spreadsheets/d/1ord7VYujSBuB_AuMJT5Kg9TQCyvhsvB4f0jsdnyI_Ss/edit#gid=1445767875)
 ### google sheet's Column D to get an India pov file.
 
@@ -1036,19 +1046,19 @@ aqli_gadm1_collapse_from_gadm2_finalized_india_pov <-  aqli_gadm2_collapse_maste
 
 aqli_gadm2_collapse_master_finalized_india_pov_vit <- aqli_gadm2_collapse_master_finalized_india_pov %>%
   rename(name0 = country, name1 = name_1, name2 = name_2) %>%
-  select(-c(iso_alpha3, natstandard, whostandard)) 
+  select(-c(iso_alpha3, natstandard, whostandard, objectid_gadm2)) 
 
 # gadm1, rename: country, name_1 AND remove iso_alpha3, natstandard, whostandard
 
 aqli_gadm1_collapse_from_gadm2_finalized_india_pov_vit <- aqli_gadm1_collapse_from_gadm2_finalized_india_pov %>%
   rename(name0 = country, name1 = name_1) %>%
-  select(-c(iso_alpha3, natstandard, whostandard)) 
+  select(-c(iso_alpha3, natstandard, whostandard, objectid_gadm1)) 
 
 # gadm0, rename country to name0 AND remove whostandard
 
 aqli_gadm0_collapse_from_gadm2_finalized_india_pov_vit <- aqli_gadm0_collapse_from_gadm2_finalized_india_pov %>%
   rename(name0 = country) %>%
-  select(-c(whostandard)) 
+  select(-c(whostandard, objectid_gadm0)) 
 
 
 
@@ -1066,7 +1076,37 @@ deleted_rows_gadm1_india_pov <- anti_join(vit_final_gadm1, aqli_gadm1_collapse_f
 added_rows_gadm0_india_pov <- anti_join(aqli_gadm0_collapse_from_gadm2_finalized_india_pov_vit, vit_final_gadm0, by = c("name0"))
 deleted_rows_gadm0_india_pov <- anti_join(vit_final_gadm0, aqli_gadm0_collapse_from_gadm2_finalized_india_pov_vit, by = c("name0")) # 0
 
-  
+
+## save the 6 files above to ssd (and then upload to box/drive > then add links here using this sheet as the base template: https://docs.google.com/spreadsheets/d/1ord7VYujSBuB_AuMJT5Kg9TQCyvhsvB4f0jsdnyI_Ss/edit#gid=1228164654)
+
+# 1
+added_rows_gadm2_india_pov %>% 
+  write_csv(str_c(pov_files_folder_path, "india/additions_deletions/", "added_rows_gadm2_india_pov.csv"))
+
+# 2
+added_rows_gadm1_india_pov %>% 
+  write_csv(str_c(pov_files_folder_path, "india/additions_deletions/", "added_rows_gadm1_india_pov.csv"))
+
+
+# 3
+added_rows_gadm0_india_pov %>% 
+  write_csv(str_c(pov_files_folder_path, "india/additions_deletions/", "added_rows_gadm0_india_pov.csv"))
+
+# 4
+
+deleted_rows_gadm2_india_pov %>% 
+  write_csv(str_c(pov_files_folder_path, "india/additions_deletions/", "deleted_rows_gadm2_india_pov.csv"))
+
+# 5
+
+deleted_rows_gadm1_india_pov %>% 
+  write_csv(str_c(pov_files_folder_path, "india/additions_deletions/", "deleted_rows_gadm1_india_pov.csv"))
+
+# 6
+
+deleted_rows_gadm0_india_pov %>% 
+  write_csv(str_c(pov_files_folder_path, "india/additions_deletions/", "deleted_rows_gadm0_india_pov.csv"))
+
 ```
 
 
@@ -1265,19 +1305,19 @@ aqli_gadm1_collapse_from_gadm2_finalized_china_pov <-  aqli_gadm2_collapse_maste
 
 aqli_gadm2_collapse_master_finalized_china_pov_vit <- aqli_gadm2_collapse_master_finalized_china_pov %>%
   rename(name0 = country, name1 = name_1, name2 = name_2) %>%
-  select(-c(iso_alpha3, natstandard, whostandard)) 
+  select(-c(iso_alpha3, natstandard, whostandard, objectid_gadm2)) 
 
 # gadm1, rename: country, name_1 AND remove iso_alpha3, natstandard, whostandard
 
 aqli_gadm1_collapse_from_gadm2_finalized_china_pov_vit <- aqli_gadm1_collapse_from_gadm2_finalized_china_pov %>%
   rename(name0 = country, name1 = name_1) %>%
-  select(-c(iso_alpha3, natstandard, whostandard)) 
+  select(-c(iso_alpha3, natstandard, whostandard, objectid_gadm1)) 
 
 # gadm0, rename country to name0 AND remove whostandard
 
 aqli_gadm0_collapse_from_gadm2_finalized_china_pov_vit <- aqli_gadm0_collapse_from_gadm2_finalized_china_pov %>%
   rename(name0 = country) %>%
-  select(-c(whostandard)) 
+  select(-c(whostandard, objectid_gadm0)) 
 
 #> export anti joined files for ViT for each level for China pov---------------
 
@@ -1293,6 +1333,38 @@ deleted_rows_gadm1_china_pov <- anti_join(vit_final_gadm1, aqli_gadm1_collapse_f
 added_rows_gadm0_china_pov <- anti_join(aqli_gadm0_collapse_from_gadm2_finalized_china_pov_vit, vit_final_gadm0, by = c("name0"))
 deleted_rows_gadm0_china_pov <- anti_join(vit_final_gadm0, aqli_gadm0_collapse_from_gadm2_finalized_china_pov_vit, by = c("name0")) # 0
 
+
+## save the 6 files above to ssd (and then upload to box/drive > then add links here using this sheet as the base template: https://docs.google.com/spreadsheets/d/1ord7VYujSBuB_AuMJT5Kg9TQCyvhsvB4f0jsdnyI_Ss/edit#gid=1228164654 )
+
+# 1
+added_rows_gadm2_china_pov %>%
+ write_csv(str_c(pov_files_folder_path, "china/additions_deletions/", "added_rows_gadm2_china_pov.csv"))
+
+# 2
+
+added_rows_gadm1_china_pov %>%
+ write_csv(str_c(pov_files_folder_path, "china/additions_deletions/", "added_rows_gadm1_china_pov.csv"))
+ 
+# 3
+
+added_rows_gadm0_china_pov %>%
+ write_csv(str_c(pov_files_folder_path, "china/additions_deletions/", "added_rows_gadm0_china_pov.csv"))
+ 
+# 4
+
+deleted_rows_gadm2_china_pov %>%
+ write_csv(str_c(pov_files_folder_path, "china/additions_deletions/", "deleted_rows_gadm2_china_pov.csv"))
+ 
+# 5
+
+deleted_rows_gadm1_china_pov %>%
+ write_csv(str_c(pov_files_folder_path, "china/additions_deletions/", "deleted_rows_gadm1_china_pov.csv"))
+
+ 
+# 6
+
+deleted_rows_gadm0_china_pov %>%
+ write_csv(str_c(pov_files_folder_path, "china/additions_deletions/", "deleted_rows_gadm0_china_pov.csv"))
 
 
 ```
@@ -1387,19 +1459,19 @@ aqli_gadm1_collapse_from_gadm2_finalized_pakistan_pov <-  aqli_gadm2_collapse_ma
 
 aqli_gadm2_collapse_master_finalized_pakistan_pov_vit <- aqli_gadm2_collapse_master_finalized_pakistan_pov %>%
   rename(name0 = country, name1 = name_1, name2 = name_2) %>%
-  select(-c(iso_alpha3, natstandard, whostandard)) 
+  select(-c(iso_alpha3, natstandard, whostandard, objectid_gadm2)) 
 
 # gadm1, rename: country, name_1 AND remove iso_alpha3, natstandard, whostandard
 
 aqli_gadm1_collapse_from_gadm2_finalized_pakistan_pov_vit <- aqli_gadm1_collapse_from_gadm2_finalized_pakistan_pov %>%
   rename(name0 = country, name1 = name_1) %>%
-  select(-c(iso_alpha3, natstandard, whostandard)) 
+  select(-c(iso_alpha3, natstandard, whostandard, objectid_gadm1)) 
 
 # gadm0, rename country to name0 AND remove whostandard
 
 aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov_vit <- aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov %>%
   rename(name0 = country) %>%
-  select(-c(whostandard)) 
+  select(-c(whostandard, objectid_gadm0)) 
 
 
 #> export anti joined files for ViT for each level for Pakistan pov---------------
@@ -1415,6 +1487,33 @@ deleted_rows_gadm1_pakistan_pov <- anti_join(vit_final_gadm1, aqli_gadm1_collaps
 # gadm0
 added_rows_gadm0_pakistan_pov <- anti_join(aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov_vit, vit_final_gadm0, by = c("name0"))
 deleted_rows_gadm0_pakistan_pov <- anti_join(vit_final_gadm0, aqli_gadm0_collapse_from_gadm2_finalized_pakistan_pov_vit, by = c("name0")) 
+
+## save the 6 files above to ssd (and then upload to box/drive > then add links here using this sheet as the base template: https://docs.google.com/spreadsheets/d/1ord7VYujSBuB_AuMJT5Kg9TQCyvhsvB4f0jsdnyI_Ss/edit#gid=1228164654 )
+
+# 1
+added_rows_gadm2_pakistan_pov %>%
+ write_csv(str_c(pov_files_folder_path, "pakistan/additions_deletions/", "added_rows_gadm2_pakistan_pov.csv"))
+
+# 2
+added_rows_gadm1_pakistan_pov %>%
+ write_csv(str_c(pov_files_folder_path, "pakistan/additions_deletions/", "added_rows_gadm1_pakistan_pov.csv"))
+
+# 3
+added_rows_gadm0_pakistan_pov %>%
+ write_csv(str_c(pov_files_folder_path, "pakistan/additions_deletions/", "added_rows_gadm0_pakistan_pov.csv"))
+
+# 4
+deleted_rows_gadm2_pakistan_pov %>%
+ write_csv(str_c(pov_files_folder_path, "pakistan/additions_deletions/", "deleted_rows_gadm2_pakistan_pov.csv"))
+
+# 5
+deleted_rows_gadm1_pakistan_pov %>%
+ write_csv(str_c(pov_files_folder_path, "pakistan/additions_deletions/", "deleted_rows_gadm1_pakistan_pov.csv"))
+
+
+# 6
+deleted_rows_gadm0_pakistan_pov %>%
+ write_csv(str_c(pov_files_folder_path, "pakistan/additions_deletions/", "deleted_rows_gadm0_pakistan_pov.csv"))
 
 
 
@@ -1512,24 +1611,20 @@ aqli_gadm1_collapse_from_gadm2_finalized_rotw_pov <-  aqli_gadm2_collapse_master
 
 aqli_gadm2_collapse_master_finalized_rotw_pov_vit <- aqli_gadm2_collapse_master_finalized_rotw_pov %>%
   rename(name0 = country, name1 = name_1, name2 = name_2) %>%
-  select(-c(iso_alpha3, natstandard, whostandard)) 
+  select(-c(iso_alpha3, natstandard, whostandard, objectid_gadm2)) 
 
 # gadm1, rename: country, name_1 AND remove iso_alpha3, natstandard, whostandard
 
 aqli_gadm1_collapse_from_gadm2_finalized_rotw_pov_vit <- aqli_gadm1_collapse_from_gadm2_finalized_rotw_pov %>%
   rename(name0 = country, name1 = name_1) %>%
-  select(-c(iso_alpha3, natstandard, whostandard)) 
+  select(-c(iso_alpha3, natstandard, whostandard, objectid_gadm1)) 
 
 # gadm0, rename country to name0 AND remove whostandard
 
 aqli_gadm0_collapse_from_gadm2_finalized_rotw_pov_vit <- aqli_gadm0_collapse_from_gadm2_finalized_rotw_pov %>%
   rename(name0 = country) %>%
-  select(-c(whostandard)) 
+  select(-c(whostandard, objectid_gadm0)) 
 
-# export anti joined files for ViT
-
-aqli_gadm2_collapse_master_finalized_rotw_pov_vit %>% 
-  write_csv(str_c(pov_files_folder_path, "rotw/", "[May2023]gadm2_aqli_2021_rotw_pov_usingViTColnamesCompletely.csv"))
 
 #> export anti joined files for ViT for each level for rotw pov---------------
 
@@ -1544,6 +1639,36 @@ deleted_rows_gadm1_rotw_pov <- anti_join(vit_final_gadm1, aqli_gadm1_collapse_fr
 # gadm0
 added_rows_gadm0_rotw_pov <- anti_join(aqli_gadm0_collapse_from_gadm2_finalized_rotw_pov_vit, vit_final_gadm0, by = c("name0"))
 deleted_rows_gadm0_rotw_pov <- anti_join(vit_final_gadm0, aqli_gadm0_collapse_from_gadm2_finalized_rotw_pov_vit, by = c("name0")) 
+
+## save the 6 files above to ssd (and then upload to box/drive > then add links here using this sheet as the base template: https://docs.google.com/spreadsheets/d/1ord7VYujSBuB_AuMJT5Kg9TQCyvhsvB4f0jsdnyI_Ss/edit#gid=1228164654 )
+
+# 1
+added_rows_gadm2_rotw_pov %>%
+ write_csv(str_c(pov_files_folder_path, "rotw/additions_deletions/", "added_rows_gadm2_rotw_pov.csv"))
+
+# 2
+added_rows_gadm1_rotw_pov %>%
+ write_csv(str_c(pov_files_folder_path, "rotw/additions_deletions/", "added_rows_gadm1_rotw_pov.csv"))
+
+# 3
+
+added_rows_gadm0_rotw_pov %>%
+ write_csv(str_c(pov_files_folder_path, "rotw/additions_deletions/", "added_rows_gadm0_rotw_pov.csv"))
+
+
+# 4
+deleted_rows_gadm2_rotw_pov %>%
+ write_csv(str_c(pov_files_folder_path, "rotw/additions_deletions/", "deleted_rows_gadm2_rotw_pov.csv"))
+
+# 5
+
+deleted_rows_gadm1_rotw_pov %>%
+ write_csv(str_c(pov_files_folder_path, "rotw/additions_deletions/", "deleted_rows_gadm1_rotw_pov.csv"))
+
+# 6
+
+deleted_rows_gadm0_rotw_pov %>%
+ write_csv(str_c(pov_files_folder_path, "rotw/additions_deletions/", "deleted_rows_gadm0_rotw_pov.csv"))
 
 
 
