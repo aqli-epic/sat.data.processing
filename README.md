@@ -1,6 +1,11 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
+![](images/aqli_data_pipeline_final_diagram.png)
+
+[Link to view the above diagram in higher
+resolution](https://www.canva.com/design/DAFw1vRz8qU/1st0GDVbNB7k2WUIKiUwpg/view?utm_content=DAFw1vRz8qU&utm_campaign=share_your_design&utm_medium=link&utm_source=shareyourdesignpanel)
+
 # AQLI satellite derived PM2.5 data processing
 
 <!-- badges: start -->
