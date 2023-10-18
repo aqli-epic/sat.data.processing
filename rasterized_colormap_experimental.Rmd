@@ -112,6 +112,9 @@ national_standards_pm2.5_jan_2023_location <- "./ar.2023.update.using.2021.pol.d
 
 national_standards_pm2.5_jan_2023_file_name <- "country_annual_average_pm2.5_standards_asInJan2023.csv"
 
+national_standards_pm2.5_june_2023_file_name <- "country_annual_average_pm2.5_standards_asInJune2023.csv"
+
+
 #> collapsed data path: gadm0 level
 ssd_location_collapsed_gadm0_data_path <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".", "data", "/collapsed/", gadm0_folder_name, "/", sep  = "")
 
@@ -860,23 +863,176 @@ end_time_vit_data_pipeline <- Sys.time()
 print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " minutes?"))
 ```
 
-# Politically Sensitive Regions (final step)
+
+
+
+
+
+
+
+
+
+# Remove waterbodies from AQLI datasets (both old colnames version and ViT colnames version)-------------------
+
+```{r}
+
+# load in the gadm2 processed files------------------------------
+aqli_gadm2_collapse_master_finalized <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_non_geom.csv")
+  
+# change their colnames to AQLI internal col names that is expected by the collapsing code in the following steps after waterbodies adjustment to the gadm2 file
+aqli_gadm2_collapse_master_finalized <- aqli_gadm2_collapse_master_finalized %>%
+   dplyr::rename_with(~str_replace(.x, "who", "llpp_who_"), dplyr::contains("who")) %>%
+  dplyr::rename_with(~str_replace(.x, "nat", "llpp_nat_"), dplyr::contains("nat")) %>%
+  rename(whostandard = llpp_who_standard,
+         natstandard = llpp_nat_standard) %>%
+    dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) 
+  
+
+#> Make the waterbodies file adjustment (removing waterbodies from AQLI files)-------------------------------------
+
+# After processing the data and incorporating missing regions by resampling, we found out that
+# the pipeline captures 58 waterbodies that include both lakes and seas. The reason why Caspian sea (or any water body) has a population #number is related to how our pipeline processes data for coastal areas. In our underlying landscan population raster, for regions near a water body, there will always be some pixels whose center lie on the water body (zoom into Lake Victoria and you'll notice that a lot of pixels are over both land and water). As a result, in the pipeline these "coastal" pixels get assigned to the corresponding polygon for that water body and as a result a population value is associated with it. That further leads to it also having a population weighted pollution value. This is something that in the future, we can work on addressing within the data pipeline itself. We for now, remove these waterbodies from the AQLI gadm2 processed files and recollapse to gadm1 and gadm0 both in the CSVs and the corresponding shapfiles.
+
+
+# read in waterbodies file
+waterbodies_aqli <- read_csv("./ar.2023.update.using.2021.pol.data/data/input/others/waterbodies_aqli.csv") 
+
+waterbodies_aqli <- waterbodies_aqli %>%
+  select(-type)
+
+### Creating AQLI internal column name version of the CSVs=============================================
+
+# create a version of old colnames gadm2 file that has waterbodies removed from it
+aqli_gadm2_collapse_master_finalized_wat_adj_internal <- aqli_gadm2_collapse_master_finalized %>%
+  anti_join(waterbodies_aqli, by = c("country" = "gadm0", "name_1" = "gadm1", "name_2" = "gadm2"))
+
+# create a version of old colnames gadm1 file that has waterbodies removed from it
+aqli_gadm1_collapse_master_finalized_wat_adj_internal <- aqli_gadm2_collapse_master_finalized_wat_adj_internal %>%
+  dplyr::group_by(country, name_1) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+  dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+  dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                   total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  dplyr::ungroup() %>%
+  select(objectid_gadm2, iso_alpha3, country, name_1, total_population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+  dplyr::rename(population = total_population, 
+                objectid_gadm1 = objectid_gadm2) %>%
+  dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+    dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm1, iso_alpha3, country, name_1, population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
+   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
+  dplyr::rename_with(~str_replace(.x, "who", "llpp_who_"), dplyr::contains("who")) %>%
+  dplyr::rename_with(~str_replace(.x, "nat", "llpp_nat_"), dplyr::contains("nat")) %>%
+  rename(whostandard = llpp_who_standard,
+         natstandard = llpp_nat_standard)
+  
+# create a version of old colnames gadm0 file that has waterbodies removed from it  
+aqli_gadm0_collapse_master_finalized_wat_adj_internal <- aqli_gadm2_collapse_master_finalized_wat_adj_internal %>%
+  dplyr::group_by(country) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+  dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+  dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                   total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  dplyr::ungroup() %>%
+  select(objectid_gadm2, iso_alpha3, country, total_population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+  dplyr::rename(population = total_population, 
+                objectid_gadm0 = objectid_gadm2) %>%
+  dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+    dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm0, iso_alpha3, country, population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
+   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
+    dplyr::rename_with(~str_replace(.x, "who", "llpp_who_"), dplyr::contains("who")) %>%
+  dplyr::rename_with(~str_replace(.x, "nat", "llpp_nat_"), dplyr::contains("nat")) %>%
+  rename(whostandard = llpp_who_standard,
+         natstandard = llpp_nat_standard)
+
+
+# write the above 3 internal AQLI column names style files to the relevant folder---------------
+aqli_gadm2_collapse_master_finalized_wat_adj_internal %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/internal_aqli_colnames_csv/[june2023]gadm2_aqli_2021_post_waterbody_adj_finalized_internal.csv")
+
+aqli_gadm1_collapse_master_finalized_wat_adj_internal %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/internal_aqli_colnames_csv/[june2023]gadm1_aqli_2021_post_waterbody_adj_finalized_internal.csv")
+
+aqli_gadm0_collapse_master_finalized_wat_adj_internal %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/internal_aqli_colnames_csv/[june2023]gadm0_aqli_2021_post_waterbody_adj_finalized_internal.csv")
+
+
+
+### Creating ViT colnames version of the CSVs===========================================
+
+aqli_gadm2_collapse_master_finalized_wat_adj_external_vit <- aqli_gadm2_collapse_master_finalized_wat_adj_internal %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_who_", "who"), dplyr::contains("llpp_who_")) %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_nat_", "nat"), dplyr::contains("llpp_nat_")) %>%
+    rename(name0 = country, name1 = name_1, name2 = name_2) %>%
+  select(-c(iso_alpha3, natstandard, whostandard)) 
+  
+  
+aqli_gadm1_collapse_master_finalized_wat_adj_external_vit <- aqli_gadm1_collapse_master_finalized_wat_adj_internal %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_who_", "who"), dplyr::contains("llpp_who_")) %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_nat_", "nat"), dplyr::contains("llpp_nat_")) %>%
+    rename(name0 = country, name1 = name_1) %>%
+  select(-c(iso_alpha3, natstandard, whostandard)) 
+
+aqli_gadm0_collapse_master_finalized_wat_adj_external_vit <- aqli_gadm0_collapse_master_finalized_wat_adj_internal %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_who_", "who"), dplyr::contains("llpp_who_")) %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_nat_", "nat"), dplyr::contains("llpp_nat_")) %>%
+   rename(name0 = country) %>%
+  select(-c(whostandard)) 
+
+ 
+
+# write the above 3 vit column name style files to the relevant folder---------------
+aqli_gadm2_collapse_master_finalized_wat_adj_external_vit %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shared_with_vit_colnames_csv/[june2023]gadm2_aqli_2021_post_waterbody_adj_finalized_external_vit.csv")
+
+aqli_gadm1_collapse_master_finalized_wat_adj_external_vit %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shared_with_vit_colnames_csv/[june2023]gadm1_aqli_2021_post_waterbody_adj_finalized_external_vit.csv")
+
+aqli_gadm0_collapse_master_finalized_wat_adj_external_vit %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shared_with_vit_colnames_csv/[june2023]gadm0_aqli_2021_post_waterbody_adj_finalized_external_vit.csv")
+
+
+```
+
+
+
+
+# Politically Sensitive Regions (final step....or I thought so!)------------------
 
 ```{r eval=FALSE, include=FALSE}
 #> read in the finalized files for 2023 shared with ViT (but partial AQLI colnames) in April, 2023 (if running the pipeline, from scratch - use the)----------
 
 aqli_gadm2_collapse_master_finalized <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_non_geom.csv")
+  
 
 aqli_gadm1_collapse_from_gadm2_finalized <-
   read_csv("./ar.2023.update.using.2021.pol.data/data/output/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_non_geom.csv")
 
 aqli_gadm0_collapse_from_gadm2_finalized <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_non_geom.csv")
 
+
 #> read in the final files shared with ViT in April 2023 (with ViT colnames)----------------
 
-vit_final_gadm2 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm2_aqli2021_vit.csv")
-vit_final_gadm1 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm1_aqli2021_vit.csv")
-vit_final_gadm0 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[finalizedApr2023]gadm0_aqli2021_vit.csv")
+vit_final_gadm2 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shared_with_vit_colnames_csv/[june2023]gadm2_aqli_2021_post_waterbody_adj_finalized_external_vit.csv")
+
+vit_final_gadm1 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shared_with_vit_colnames_csv/[june2023]gadm1_aqli_2021_post_waterbody_adj_finalized_external_vit.csv")
+
+vit_final_gadm0 <- read_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shared_with_vit_colnames_csv/[june2023]gadm0_aqli_2021_post_waterbody_adj_finalized_external_vit.csv")
 
 # removing objectid columns from each vit_final files for later "anti-joining".
 vit_final_gadm2 <- vit_final_gadm2 %>%
@@ -1677,6 +1833,450 @@ deleted_rows_gadm0_rotw_pov %>%
 
 
 
+# Sharing our shapefiles with ViT
+
+```{r}
+# reading in the finalized gadm2 csv and filtering the colormap shapefile to only contain those ids that are present in the gadm2 csv
+# (if already read in above, in the pov bit or earlier, don't read it again). In this case, I have already read in the files from the 
+# first chunk of the pov files processing. These files are in ViT naming format.
+
+# only keep those objectids in gadm2 that are present in the CSV
+vit_final_gadm2_objectids <- vit_final_gadm2$objectid_gadm2
+
+# make column name changes to the shapefile and bring it in the format as preferred by ViT
+gadm2_shapefile_vit_valid_final <- colormap %>%
+  rename(name0 = NAME_0, 
+         name1 = NAME_1, 
+         name2 = NAME_2,
+         isoalp3 = iso_alpha3,
+         obidgadm2 = objectid) %>%
+  select(obidgadm2, isoalp3, name0, name1, name2, geometry)
+
+# filter for the above selected objectids
+gadm2_shapefile_vit_valid_final_subset <- gadm2_shapefile_vit_valid_final %>%
+  filter(obidgadm2 %in% vit_final_gadm2_objectids)
+
+# write gadm2 shapefile for ViT
+gadm2_shapefile_vit_valid_final_subset %>%
+  sf::write_sf("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shapefiles_final/aqli_gadm2_intermed_june2023.shp", driver = "ESRI Shapefile", layer_options = "ENCODING=UTF-8")
+
+# create gadm1 and gadm0 shapefile in QGIS (by using the dissolve feature under Vector > Geoprocessing)
+
+# read all 3 gadm level files saved and make final adjustments before exporting it to share with ViT
+gadm2_shapefile_intermed_qgis <- sf::st_read("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shapefiles_final/aqli_gadm2_intermed_june2023.shp")
+
+gadm1_shapefile_intermed_qgis <- sf::st_read("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shapefiles_final/aqli_gadm1_intermed_june2023.shp")
+
+gadm0_shapefile_intermed_qgis <- sf::st_read("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shapefiles_final/aqli_gadm0_intermed_june2023.shp")
+
+
+# finalize gadm2 shapefile for ViT
+gadm2_shapefile_final_qgis <- gadm2_shapefile_intermed_qgis %>%
+  select(obidgadm2, name0, name1, name2, geometry) %>%
+  arrange(obidgadm2)
+
+# finalize gadm1 shapefile for ViT
+gadm1_shapefile_final_qgis <- gadm1_shapefile_intermed_qgis %>%
+  select(-c(obidgadm2, isoalp3, name2)) %>%
+  arrange(name0, name1) %>%
+  mutate(obidgadm1 = row_number()) %>%
+  select(obidgadm1, name0,  name1, geometry) 
+
+# finalize gadm0 shapefile for ViT
+
+india_polygon <- gadm0_shapefile_intermed_qgis %>% 
+  filter(name0 == "India") %>%
+  st_make_valid() %>%
+  group_by(name0) %>%
+  summarise() %>%
+  mutate(isoalp3 = "IND") %>%
+  select(isoalp3, name0, geometry)
+
+gadm0_shapefile_final_qgis <- gadm0_shapefile_intermed_qgis %>%
+  select(-c(obidgadm2, name1, name2)) %>%
+  filter(!(name0 == "India")) %>%
+  bind_rows(india_polygon) %>%
+  arrange(name0) %>%
+  mutate(obidgadm0 = row_number()) %>%
+  select(obidgadm0, isoalp3, name0, geometry)
+
+gadm0_shapefile_final_qgis <- gadm0_shapefile_final_qgis %>%
+  st_as_sf()
+
+
+#> write finalized shapefiles to be shared with ViT
+
+# gadm2
+gadm2_shapefile_final_qgis %>%  sf::write_sf("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shapefiles_final/gadm2/aqli_gadm2_final_june2023.shp", driver = "ESRI Shapefile", layer_options = "ENCODING=UTF-8")
+ 
+ 
+ # gadm1
+
+gadm1_shapefile_final_qgis %>%
+  sf::write_sf("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shapefiles_final/gadm1/aqli_gadm1_final_june2023.shp", driver = "ESRI Shapefile", layer_options = "ENCODING=UTF-8")
+ 
+ 
+ # gadm0
+
+gadm0_shapefile_final_qgis %>%
+  sf::st_write("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/shapefiles_final/gadm0/aqli_gadm0_final_june2023.shp", driver = "ESRI Shapefile", layer_options = "ENCODING=UTF-8")
+```
+
+
+
+
+
+
+
+
+
+
+# readding the missing regions so that it can be shown as NA on the map and updating the natstandards of a couple countries to NA as instead of keeping the "historical" AQLI standards for a couple countries for which NAAQS do not exist as per the UNEP 2021 report, we decided to report them as NA, this additional adjustment will be made for the list of countries listed below.-----------------------------
+
+```{r}
+
+# load in the AQLI gadm2 waterbodies objectids (pre-saved for the current dataset)
+objids_waterbodies_gadm2 <- read_csv("./ar.2023.update.using.2021.pol.data/data/input/others/waterbodies_objectids_gadm2.csv")  #58
+objids_waterbodies_gadm2 <- objids_waterbodies_gadm2 %>%  
+  filter(objectid_gadm2  != 43636)                           # 57
+
+# load in AQLI internal column names latest gadm2 dataset (waterbodies removed) and add Bear lake (which is not actually a lake)
+gadm2_aqli_2021_without_missing_data_regions <- read_csv("./ar.2023.update.using.2021.pol.data/data/output_post_waterbodies_adj_june2023/internal_aqli_colnames_csv/[june2023]gadm2_aqli_2021_post_waterbody_adj_finalized_internal.csv")
+
+
+#> add back Bear Lake (the hole in Idaho, which I previously thought was a lake, but is actually a county of the same name containing
+#> the lake of the same name: funny!)--------------------------------------------------------------------------------------------------
+
+# load in the gadm2 processed files (with waterbodies)
+tmp_gadm2_with_waterbodies <- read_csv("./ar.2023.update.using.2021.pol.data/data/output/[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_non_geom.csv")
+
+# change back to AQLI internal column name structure
+tmp_gadm2_with_waterbodies <- tmp_gadm2_with_waterbodies %>%
+  dplyr::rename_with(~str_replace(.x, "who", "llpp_who_"), dplyr::contains("who")) %>%
+  dplyr::rename_with(~str_replace(.x, "nat", "llpp_nat_"), dplyr::contains("nat")) 
+  
+# bear lake
+bear_lake <- tmp_gadm2_with_waterbodies %>%
+  filter(name_2  == "Bear Lake") %>%
+    rename(whostandard = llpp_who_standard,
+         natstandard = llpp_nat_standard)
+
+# add back to the main gadm2 dataset
+gadm2_aqli_2021_without_missing_data_regions <- gadm2_aqli_2021_without_missing_data_regions %>%
+  bind_rows(bear_lake) %>%
+  arrange(objectid_gadm2)
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+#> national standards updated read in (if updated are already present above, don't update again)
+
+# reading in the national standards file (jan 2023 uodate file)
+national_standards_pm2.5 <- readr::read_csv(stringr::str_c(national_standards_pm2.5_jan_2023_location, national_standards_pm2.5_jan_2023_file_name, sep = ""))
+
+
+# keeping and renaming relevant columns
+national_standards_pm2.5 <- national_standards_pm2.5 %>%
+  dplyr::select(country, natstandard_pm2.5_new_2023_report_micr_grm_cubic_meter_op1) %>%
+  dplyr::rename(natstandard_updated = natstandard_pm2.5_new_2023_report_micr_grm_cubic_meter_op1)
+
+
+# reading in the national standards file (june 2023 uodate file)
+national_standards_pm2.5_june2023 <- readr::read_csv(stringr::str_c(national_standards_pm2.5_jan_2023_location, national_standards_pm2.5_june_2023_file_name, sep = ""))
+
+
+# keeping and renaming relevant columns in national standards june 2023 file
+national_standards_pm2.5_june2023 <- national_standards_pm2.5_june2023 %>%
+  dplyr::select(country, natstandard_pm2.5_new_2023_report_micr_grm_cubic_meter_op1) %>%
+  dplyr::rename(natstandard_updated = natstandard_pm2.5_new_2023_report_micr_grm_cubic_meter_op1)
+
+
+# joining old and new nat standard file
+old_new_nat_list_join <- national_standards_pm2.5 %>%
+  left_join(national_standards_pm2.5_june2023, by = "country")
+
+# filtering only those countries whose nat standards have been updated to NA in the June 2023 second round of natstandrd update
+country_natstan_upd_na <- old_new_nat_list_join %>%
+  mutate(updated_country = ifelse(natstandard_updated.x != "No national standard" & natstandard_updated.y == "No national standard", 1, 0)) %>%
+  filter(updated_country == 1) %>%
+  select(country) %>%
+  unlist() %>%
+  as.vector()
+
+#------------------------------------------------------------------------------------------------------
+
+objids_waterbodies_gadm2 <-  objids_waterbodies_gadm2 %>%
+  unlist() %>%
+  as.vector()
+
+# removing waterbodies from colormap
+colormap_sans_waterbodies <- colormap %>%
+  filter(objectid %notin% objids_waterbodies_gadm2)
+
+# gadm 2 missing data regions complete list
+gadm2_regions_missing_data <- colormap_sans_waterbodies %>%
+  anti_join(gadm2_aqli_2021_without_missing_data_regions, by = c("objectid" = "objectid_gadm2")) %>%
+  st_drop_geometry()
+
+# add national standards to missing data regions list
+gadm2_regions_missing_data <- gadm2_regions_missing_data %>%
+  left_join(national_standards_pm2.5_june2023, by = c("NAME_0" = "country")) %>%
+  rename(natstandard = natstandard_updated, 
+         country = NAME_0, 
+         name_1 = NAME_1, 
+         name_2 = NAME_2, 
+         objectid_gadm2 = objectid) %>%
+  mutate(whostandard = 5, 
+         population = NA, 
+         natstandard = ifelse(natstandard == "No national standard", NA, natstandard)) %>%
+  select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard)
+
+# changing the national standards column to numeric
+gadm2_regions_missing_data$natstandard <- as.numeric(gadm2_regions_missing_data$natstandard)
+
+#> internal AQLI CSVs----------------------------------------
+
+# GADM2: add the missing data regions to the gadm2 (waterbodies removed and also remove any zero population regions) data to create the final gadm2 data and incorporate countries, whose national standards have been NA'd
+gadm2_aqli_2021_with_missing_data_regions <- gadm2_regions_missing_data %>%
+  bind_rows(gadm2_aqli_2021_without_missing_data_regions) %>%
+  arrange(objectid_gadm2) %>%
+  mutate(natstandard = ifelse(country %in% country_natstan_upd_na, NA, natstandard)) %>%
+  dplyr::mutate(across(matches("llpp_nat"), ~ifelse(is.na(natstandard), NA, .x)))
+
+# update Thailand national standard to 15 micrograms per cubic meter and replace the thailand rows in gadm2 with this updated dataset
+thailand_gadm2 <- gadm2_aqli_2021_with_missing_data_regions %>%
+  filter(country == "Thailand") %>%
+  mutate(natstandard = 15) %>%
+  dplyr::select(-(starts_with("llpp_nat_"))) %>%
+  dplyr::mutate(across(starts_with("pm"), (~round((.x - natstandard)*aqli_lyl_constant, 2)), .names = "llpp_nat_{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp_nat_"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat_"), ~ifelse(natstandard == 0, NA, .x))) %>%
+    dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp_nat_")) 
+
+# add back Thailand new updated dataset
+gadm2_aqli_2021_with_missing_data_regions <- gadm2_aqli_2021_with_missing_data_regions %>%
+  filter(country != "Thailand") %>%
+  bind_rows(thailand_gadm2) %>%
+  arrange(objectid_gadm2)
+
+
+# I  am here
+
+#> -------------------------------------------
+
+# reate the final gadm1 file from the above missing data incorporated waterbodies removed csv
+gadm1_aqli_2021_with_missing_data_regions <- gadm2_aqli_2021_with_missing_data_regions %>%
+  dplyr::group_by(country, name_1) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+  dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+  dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                   total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  dplyr::ungroup() %>%
+  select(objectid_gadm2, iso_alpha3, country, name_1, total_population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+  dplyr::rename(population = total_population, 
+                objectid_gadm1 = objectid_gadm2) %>%
+  dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+    dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm1, iso_alpha3, country, name_1, population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
+   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
+  dplyr::rename_with(~str_replace(.x, "who", "llpp_who_"), dplyr::contains("who")) %>%
+  dplyr::rename_with(~str_replace(.x, "nat", "llpp_nat_"), dplyr::contains("nat")) %>%
+  rename(whostandard = llpp_who_standard,
+         natstandard = llpp_nat_standard) %>%
+  dplyr::mutate(across(matches("pm|llpp"), ~ifelse(population == 0, NA, .x))) %>%
+  dplyr::mutate(population = ifelse(population == 0, NA, population))
+  
+# create a version of old colnames gadm0 file that has waterbodies removed from it  
+gadm0_aqli_2021_with_missing_data_regions <- gadm2_aqli_2021_with_missing_data_regions %>%
+  dplyr::group_by(country) %>%
+  dplyr::mutate(pop_weights = population/sum(population, na.rm = TRUE)) %>%
+  dplyr::mutate(across(dplyr::starts_with("pm"), ~(.x*pop_weights), .names = "{col}_pop_weighted")) %>%
+  dplyr::summarise(across(dplyr::contains("pop_weighted"), ~(round(sum(.x, na.rm = TRUE), 2)), .names = "avg_{col}"),
+                   total_population = sum(population, na.rm = TRUE), objectid_gadm2 = objectid_gadm2[1], iso_alpha3 = iso_alpha3[1], whostandard = whostandard[1], natstandard = natstandard[1]) %>%
+  dplyr::ungroup() %>%
+  select(objectid_gadm2, iso_alpha3, country, total_population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::mutate(objectid_gadm2 = dplyr::row_number()) %>%
+  dplyr::rename(population = total_population, 
+                objectid_gadm0 = objectid_gadm2) %>%
+  dplyr::rename_with(~str_replace_all(.x, "(_pop_weighted)|(avg_)", ""), dplyr::contains("_pop_weighted")) %>%
+    dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
+  dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
+  dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::select(objectid_gadm0, iso_alpha3, country, population, whostandard, natstandard, dplyr::everything()) %>%
+  dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
+   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
+  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
+    dplyr::rename_with(~str_replace(.x, "who", "llpp_who_"), dplyr::contains("who")) %>%
+  dplyr::rename_with(~str_replace(.x, "nat", "llpp_nat_"), dplyr::contains("nat")) %>%
+  rename(whostandard = llpp_who_standard,
+         natstandard = llpp_nat_standard) %>%
+  dplyr::mutate(across(matches("pm|llpp"), ~ifelse(population == 0, NA, .x))) %>%
+  dplyr::mutate(population = ifelse(population == 0, NA, population))
+
+
+
+# write the above 3 internal AQLI column names style files to the relevant folder---------------
+gadm2_aqli_2021_with_missing_data_regions %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/internal_aqli_colnames_csv/[june302023]gadm2_aqli_2021_internal_col_names.csv")
+
+  gadm1_aqli_2021_with_missing_data_regions %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/internal_aqli_colnames_csv/[june302023]gadm1_aqli_2021_internal_col_names.csv")
+
+  
+gadm0_aqli_2021_with_missing_data_regions %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/internal_aqli_colnames_csv/[june302023]gadm0_aqli_2021_internal_col_names.csv")
+
+
+
+
+
+### Creating ViT colnames version of the CSVs===========================================
+
+gadm2_aqli_2021_with_missing_data_regions_vit <- gadm2_aqli_2021_with_missing_data_regions %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_who_", "who"), dplyr::contains("llpp_who_")) %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_nat_", "nat"), dplyr::contains("llpp_nat_")) %>%
+    rename(name0 = country, name1 = name_1, name2 = name_2) %>%
+  select(-c(iso_alpha3, natstandard, whostandard)) 
+  
+  
+gadm1_aqli_2021_with_missing_data_regions_vit <- gadm1_aqli_2021_with_missing_data_regions %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_who_", "who"), dplyr::contains("llpp_who_")) %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_nat_", "nat"), dplyr::contains("llpp_nat_")) %>%
+    rename(name0 = country, name1 = name_1) %>%
+  select(-c(iso_alpha3, natstandard, whostandard)) 
+
+gadm0_aqli_2021_with_missing_data_regions_vit <- gadm0_aqli_2021_with_missing_data_regions %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_who_", "who"), dplyr::contains("llpp_who_")) %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_nat_", "nat"), dplyr::contains("llpp_nat_")) %>%
+   rename(name0 = country) %>%
+  select(-c(whostandard)) 
+
+
+
+# write the above 3 vit column name style files to the relevant folder---------------
+gadm2_aqli_2021_with_missing_data_regions_vit %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shared_with_vit_colnames_csv/[june302023]gadm2_aqli_2021_vit.csv")
+
+  gadm1_aqli_2021_with_missing_data_regions_vit %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shared_with_vit_colnames_csv/[june302023]gadm1_aqli_2021_vit.csv")
+
+  
+gadm0_aqli_2021_with_missing_data_regions_vit %>%
+  write_csv("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shared_with_vit_colnames_csv/[june302023]gadm0_aqli_2021_vit.csv")
+
+
+
+
+
+#> rewriting shapefiles---------------------------------------------------------------------------
+
+
+
+# make column name changes to the shapefile and bring it in the format as preferred by ViT
+gadm2_shapefile_vit_valid_final_june302023 <- colormap_sans_waterbodies %>%
+  rename(name0 = NAME_0, 
+         name1 = NAME_1, 
+         name2 = NAME_2,
+         isoalp3 = iso_alpha3,
+         obidgadm2 = objectid) %>%
+  select(obidgadm2, isoalp3, name0, name1, name2, geometry)
+
+# write gadm2 shapefile for ViT
+gadm2_shapefile_vit_valid_final_june302023 %>%
+  sf::write_sf("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shapefiles_final/aqli_gadm2_intermed_june302023.shp", driver = "ESRI Shapefile", layer_options = "ENCODING=UTF-8")
+
+# create gadm1 and gadm0 shapefile in QGIS (by using the dissolve feature under Vector > Geoprocessing)
+
+# read all 3 gadm level files saved and make final adjustments before exporting it to share with ViT
+gadm2_shapefile_intermed_qgis <- sf::st_read("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shapefiles_final/aqli_gadm2_intermed_june302023.shp")
+
+gadm1_shapefile_intermed_qgis <- sf::st_read("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shapefiles_final/aqli_gadm1_intermed_june302023.shp")
+
+gadm0_shapefile_intermed_qgis <- sf::st_read("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shapefiles_final/aqli_gadm0_intermed_june302023.shp")
+
+
+# finalize gadm2 shapefile for ViT
+gadm2_shapefile_final_qgis <- gadm2_shapefile_intermed_qgis %>%
+  select(obidgadm2, name0, name1, name2, geometry) %>%
+  arrange(obidgadm2)
+
+# finalize gadm1 shapefile for ViT
+gadm1_shapefile_final_qgis <- gadm1_shapefile_intermed_qgis %>%
+  select(-c(obidgadm2, isoalp3, name2)) %>%
+  arrange(name0, name1) %>%
+  mutate(obidgadm1 = row_number()) %>%
+  select(obidgadm1, name0,  name1, geometry) 
+
+# finalize gadm0 shapefile for ViT
+
+india_polygon <- gadm0_shapefile_intermed_qgis %>% 
+  filter(name0 == "India") %>%
+  st_make_valid() %>%
+  group_by(name0) %>%
+  summarise() %>%
+  mutate(isoalp3 = "IND") %>%
+  select(isoalp3, name0, geometry)
+
+gadm0_shapefile_final_qgis <- gadm0_shapefile_intermed_qgis %>%
+  select(-c(obidgadm2, name1, name2)) %>%
+  filter(!(name0 == "India")) %>%
+  bind_rows(india_polygon) %>%
+  arrange(name0) %>%
+  mutate(obidgadm0 = row_number()) %>%
+  select(obidgadm0, isoalp3, name0, geometry)
+
+gadm0_shapefile_final_qgis <- gadm0_shapefile_final_qgis %>%
+  st_as_sf()
+
+
+#> write finalized shapefiles to be shared with ViT
+
+# gadm2
+gadm2_shapefile_final_qgis %>%  sf::write_sf("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shapefiles_final/gadm2/aqli_gadm2_final_june302023.shp", driver = "ESRI Shapefile", layer_options = "ENCODING=UTF-8")
+ 
+ 
+ # gadm1
+
+gadm1_shapefile_final_qgis %>%
+  sf::write_sf("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shapefiles_final/gadm1/aqli_gadm1_final_june302023.shp", driver = "ESRI Shapefile", layer_options = "ENCODING=UTF-8")
+ 
+ 
+ # gadm0
+
+gadm0_shapefile_final_qgis %>%
+  sf::st_write("./ar.2023.update.using.2021.pol.data/data/output_post_missing_data_incorp_and_nat_stan_upd_endJune_earlyJuly2023/shapefiles_final/gadm0/aqli_gadm0_final_june302023.shp", driver = "ESRI Shapefile", layer_options = "ENCODING=UTF-8")
+
+
+
+
+
+
+
+```
+
+
+
+
+
 
 
 
@@ -2240,6 +2840,7 @@ unique(colormap$NAME_0)[rel_ind]
 
 #> plot timeseries/heatmap of last 24 years country wise and compare with old data counterpart heatmaps
  
+
 country_graph <- "Pakistan"
 
 #> trendlines, country wise compare 2020 v/s 2021 data
@@ -2393,6 +2994,15 @@ heatmap_region_final <- grid.arrange(heatmap_region_2020, heatmap_region_2021, n
 # tmp 
 
 ```{r}
-# 
+foo1 <- gadm2_aqli_2021 %>% 
+  mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         foo = llpp_who_2020*pop_weights*population) %>% 
+  summarise(sum_foo = sum(foo, na.rm = TRUE))
+
+foo2 <- gadm2_aqli_2021 %>% 
+  mutate(pop_weights = population/sum(population, na.rm = TRUE), 
+         foo = llpp_who_2021*pop_weights*population) %>% 
+  summarise(sum_foo = sum(foo, na.rm = TRUE))
+
 ```
 
