@@ -39,7 +39,7 @@ region_pm2.5_standard <- 15 # China
 
 # helpful functions
 `%notin%` <- Negate(`%in%`)
-source(paste0(here(), "/R/sat.data.processing.general.helper.R"))
+# source(paste0(here(), "/R/sat.data.processing.general.helper.R"))
 
 print("Libraries and Global variables loaded in.")
 
@@ -112,11 +112,9 @@ aqli_data_share_folder_name <- "aqli.2024.report.data.share"
 ssd_location_rasterized_data_0.008 <- stringr::str_c(ssd_drive, aqli_data_share_folder_name, "/", report_publishing_year, ".publish.Year.with.", update_year, ".data", "/rasterized/", raster_res, "/", sep = "")
 
 # updated national standards file location and file name
-national_standards_pm2.5_jan_2023_location <- paste0(here(), "/", master_folder_data_path, "/", "data/input/standards/") 
+national_standards_pm2.5_location <- paste0(here(), "/", master_folder_data_path, "/", "data/input/standards/") 
 
-national_standards_pm2.5_jan_2023_file_name <- "country_annual_average_pm2.5_standards_asInJan2023.csv"
-
-national_standards_pm2.5_june_2023_file_name <- "country_annual_average_pm2.5_standards_asInJune2023.csv"
+national_standards_pm2.5_sep_2023_file_name <- "country_annual_average_pm2.5_standards_asInSep2023.csv"
 
 
 #> collapsed data path: gadm0 level
@@ -161,6 +159,9 @@ threshold_0 <- Sys.time()
 # population raw data
 population_dataset <- raster::raster(str_c(pop_data_location, pop_data_file_name, sep = ""))
 
+# close connection
+closeAllConnections()
+
 # naming the raw global landscan population data and setting its crs to be the same as the pollution data
 raster::crs(population_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 names(population_dataset) <- "population"
@@ -181,9 +182,13 @@ names(population_dataset) <- "population"
 # reading in the pre-cropped population raster, which remains the same for all pollution datasets
 pop_raw_landscan_crop_pol <- raster::raster(paste0(here(), "/", master_folder_data_path, "/data/intermediate/pop_raw_landscan_crop_pol.tif"))
 
+# close connection
+closeAllConnections()
+
 
 # load latest colormap shapefile for (last complete updated: November, 2022)
 colormap <- sf::st_read(str_c(shp_files_location, colormap_location, sep = ""))
+
 
 #-- this remains same for all pollution datasets, hence writing it, and will then simply read it
 # polygon_cells <- fasterize(colormap, pol_0.01_region_in_landscan_pop_res, field = "objectid", fun = "last")
@@ -193,6 +198,9 @@ colormap <- sf::st_read(str_c(shp_files_location, colormap_location, sep = ""))
 #---
 
 polygon_cells <- raster::raster(paste0(here(), "/", "experimentation/colormap_rasterized.tif"))
+
+# close connection
+closeAllConnections()
 
 # making sure that the crs of the rasterized shapefile is the same as the 0.008 population and pollution rasters. 
 raster::crs(polygon_cells) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
@@ -217,18 +225,21 @@ print("For loop begins: Processing pollution rasters 1 year at a time")
 
 for (i in 1:length(pol_data_list)){
   
+    # for testing purposes
+
+   if(i <= 22){
+     next
+   }
+  
+  # close all connections
+  closeAllConnections()
+  
   # benchmarking
   threshold_1.5 <- Sys.time()
   
   print(stringr::str_c("Iteration #", i, "/", (update_year - pol_data_start_year) + 1, " begins"))
   
   pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
-  
-  # for testing purposes
-
-   if(i > 3){
-     break
-   }
   
   # pollution file name given the current iteration
   cur_pol_file_name <- pol_data_list[i]
@@ -238,6 +249,9 @@ for (i in 1:length(pol_data_list)){
   
   # read in the pollution raster for a given year
   pollution_dataset <- raster::raster(str_c(pol_data_location, cur_pol_file_name, sep = ""))
+  
+  # close connection
+  closeAllConnections()
   
   # naming the raw global pollution data and setting its crs
 raster::crs(pollution_dataset) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
@@ -258,6 +272,9 @@ print("stacking all layers in a raster brick")
 # creating a raster brick using the population and pollution data
 region_raster_brick <- pop_raw_landscan_crop_pol %>% 
   raster::addLayer(pol_0.01_region_in_landscan_pop_res) 
+
+# close connection
+closeAllConnections()
 
 # setting the names of the newly created placheolders
 names(region_raster_brick) <- c("population", "pm2.5_pollution")
@@ -292,7 +309,7 @@ aqli_raster_brick_df <- raster::as.data.frame(region_raster_brick)
 print("raster brick converted to data frame")
 
 # write rasterized dataframe to ssd, in arrow data format (0.008x0.008 resolution)
-aqli_raster_brick_df %>% arrow::write_dataset(str_c(ssd_location_rasterized_data_0.008, cur_pol_file_year, ".parquet"))
+# aqli_raster_brick_df %>% arrow::write_dataset(str_c(ssd_location_rasterized_data_0.008, cur_pol_file_year, ".parquet"))
 
 # benchmarking
 threshold_6 <- Sys.time() 
@@ -354,6 +371,8 @@ threshold_10 <- Sys.time()
 # time it took to complete the current iteration
 
 print(str_c("Time taken to complete iteration # ", i, "/", (update_year - pol_data_start_year) + 1, ": ", threshold_10 - threshold_1.5))
+closeAllConnections()
+closeAllConnections()
 
 }
 
@@ -375,13 +394,13 @@ print(str_c("Total time taken (main pipeline for loop) with ", i, " years of pol
 #> Note: if you have already processed the pollution datasets in the above chunk and just want to run the combining code in this chunk, make sure to uncomment the following code and run it before proceeding to get the colormap and pol_col_name_vec. Also, make sure to run the "setup" and "set path" chunks. If you have already run the above chunks, then you would already have these objects and in that case there is no need to run the below commented code.
 
 # # load latest colormap shapefile for (last complete updated: November, 2022)
-# colormap <- sf::st_read(str_c(shp_files_location, colormap_location, sep = ""))
-# 
-# # generate the pol_col_name_vec
-# pol_col_name_vec <- c()
-# for(i in 1:24){
-#      pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
-#  }
+colormap <- sf::st_read(str_c(shp_files_location, colormap_location, sep = ""))
+
+# generate the pol_col_name_vec
+pol_col_name_vec <- c()
+for(i in 1:25){
+     pol_col_name_vec[i] <- str_c("pm", (pol_data_start_year + (i-1)))
+ }
 
 #-----------
 
@@ -437,7 +456,7 @@ for(i in 1:length(collapsed_gadm2_files_vec_rel_files)){
 #> write aqli_gadm2_collapse_master df's current version (which does not include the missing regions and also does not capture the na pop regions that we will do next). Next step will be to capture the na population regions (by that I don't mean regions with NA in the population column (no such regions exist), but rather regions where population = 0) and missing regions and then finally we'll incorporate them in the aqli_gadm2_collapse_master and write that final version later.
 
 aqli_gadm2_collapse_master %>%
-    readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "[missingAndNAPopRegionsNotYetIncorporatedVersion]master_global_allyears_gadm2_non_geom.csv"))
+    readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "[missingAndNAPopRegionsNotYetIncorporatedOnlyPMVersion]master_global_allyears_gadm2_non_geom.csv"))
 
 #> missing regions and zero population gadm2 capture using the regional_summary function (by resampling to a resolution of 0.001) from the helper file in the R sub-directory and adding them back into the aqli_gadm2_collapse_master object, before continuing to add life years lost columns to it.------------------
 
@@ -463,7 +482,19 @@ res_resample_to <- 0.001 # mention the resolution to which the na pop region is 
 res_resample_from <- 0.00833333 # mention the current resoltion 
 start_year <- 1998 # mention start year, usually the same as the first year for which the AQLI data is available.
 
-na_pop_regions_processed <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, res_resample_to,objectid_gadm2_na_pop, start_year, res_resample_from)
+# capturing zero pop regions in batches (the cuts will have to be experimented with because sometimes specific regions take more time than others. I am not entirely sure, why that is the case as of now, but that is something that can be looked into. For example, it's not necessarily the case that regions with bigger areas take more time to process, sometimes, regions with relatively smaller areas take more time to process compared to regions with bigger areas)
+na_pop_regions_processed_part1_1_23 <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, res_resample_to,objectid_gadm2_na_pop[1:23], start_year, res_resample_from)
+
+na_pop_regions_processed_part2_24_24 <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, res_resample_to,objectid_gadm2_na_pop[24], start_year, res_resample_from)
+
+na_pop_regions_processed_part3_25_60 <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, res_resample_to,objectid_gadm2_na_pop[25:60], start_year, res_resample_from)
+
+na_pop_regions_processed_part4_61_end <- regional_summary(colormap, pol_data_location, pop_raw_landscan_crop_pol, res_resample_to,objectid_gadm2_na_pop[61:length(objectid_gadm2_na_pop)], start_year, res_resample_from)
+
+# bind rows to combine our attempt to capture na pop regions
+na_pop_regions_processed <- bind_rows(na_pop_regions_processed_part1_1_23, na_pop_regions_processed_part2_24_24, 
+                                      na_pop_regions_processed_part3_25_60, na_pop_regions_processed_part4_61_end)
+
 
 # adding a temporary national standard column to the na_pop_regions_processed dataset so that it matches the aqli_gadm2_collapse_master dataset
 
@@ -471,9 +502,15 @@ na_pop_regions_processed <- na_pop_regions_processed %>%
   mutate(natstandard = NA) %>%
   select(objectid_gadm2:whostandard, natstandard, everything())
 
-# write the na pop regions processed df to ssd's relevant folder
+# if for a given region pop still = 0, replace all other pm columns with NA and then replace the pop column with NA
+na_pop_regions_processed_final <- na_pop_regions_processed %>%
+  dplyr::mutate(across(starts_with("pm"), ~ifelse(population == 0, NA, .x))) %>%
+  mutate(population = ifelse(population == 0, NA, population))
+  
 
-na_pop_regions_processed %>% 
+# write the na pop regions processed (22 out of 102 were processed, but we write all 102 to the ssd) df to ssd's relevant folder
+
+na_pop_regions_processed_final %>% 
   write_csv(str_c(na_pop_regions_folder_path, "na_pop_regions_processed.csv"))
 
 ## filter out those regions whose population doesn't make sense (limitation of the current resampling pipeline, need to resolved in future updates)
@@ -503,7 +540,7 @@ na_pop_regions_processed %>%
 # get indices for missing areas
 missing_ids_index <- colormap$objectid %notin% aqli_gadm2_collapse_master$objectid_gadm2
 
-# missing areas
+# missing areas (153 in total)
 missing_areas <- colormap[missing_ids_index, ]
 
 # calculating areas for missing areas and filetering areas whose area is less than or equal to  a threshold
@@ -518,8 +555,8 @@ missing_areas_drop_geom <- missing_areas %>%
   mutate(area_sans_units = as.numeric(area)) %>%
   st_drop_geometry()
 
-# regions that we expect to be missing and filtering them out of the above list
-missing_regions_exp_to_be_missing <- readxl::read_xlsx("C:/Users/Aarsh/Desktop/others/part-1_expectToBeMissing.xlsx")
+# regions that we expect to be missing and filtering them out of the above list (75 out of 153 total missing)
+missing_regions_exp_to_be_missing <- readxl::read_xlsx(paste0(here(), "/", master_folder_data_path, "/data/intermediate/", "part-1_expectToBeMissing.xlsx"))
 
 # # regions we don't expect to be missing according to the csv (the method right below, is more accurate way to get the 153 - 70 regions that we don't expect to be missing).
 # missing_regions_dont_expect_missing <- missing_areas_drop_geom %>%
@@ -527,7 +564,7 @@ missing_regions_exp_to_be_missing <- readxl::read_xlsx("C:/Users/Aarsh/Desktop/o
 #         NAME_1 %notin% missing_regions_exp_to_be_missing$NAME_1 &
 #         NAME_2 %notin% missing_regions_exp_to_be_missing$NAME_2)
 
-# regions that we don't expect to be missing according to the object ids (this will give us the 83 regions that we don't expect to be missing). Post that, I'll remove a 5 other regions by feeding in object ids that I know are outside the bounds of the ACAG pm2.5 data limits (). As of now, this part of code requires human intervention and a bit of testing around (every year this bit would have to be manually changed, e.g. the area threshold in the filter command below), but I am thinking of a better way to automate this.
+# regions that we don't expect to be missing (78 = 153 - 75, where 75 are the ones we expect to be missing) according to the object ids (this will give us the 83 regions that we don't expect to be missing). Post that, I'll remove a 5 other regions by feeding in object ids that I know are outside the bounds of the ACAG pm2.5 data limits (). As of now, this part of code requires human intervention and a bit of testing around (every year this bit would have to be manually changed, e.g. the area threshold in the filter command below), but I am thinking of a better way to automate this.
 missing_regions_dont_expect_missing_objid <- missing_areas_drop_geom %>%
   filter(area_sans_units < 245.9) %>%
   filter(objectid %notin% c(28044, 28048, 28063, 35561, 35567)) %>%
@@ -541,8 +578,13 @@ missing_regions_capture <- missing_regions_capture %>%
     mutate(natstandard = NA) %>%
   select(objectid_gadm2:whostandard, natstandard, everything())
 
+missing_regions_capture_final <- missing_regions_capture %>%
+   dplyr::mutate(across(starts_with("pm"), ~ifelse(population == 0, NA, .x))) %>%
+  mutate(population = ifelse(population == 0, NA, population))
+ 
+
 # missing regions captured write to ssd
-missing_regions_capture %>%
+missing_regions_capture_final %>%
    write_csv(str_c(missing_regions_folder_path, "missing_regions_processed.csv"))
 
 ## store objectids of all resampled/captured (to a resolution of 0.001) na population regions in a vector (already present in the gadm2 collapsed file and will replace their old version). 16/97 na pop regions have been captured. For the ones, not captured, improvements will be made to this pipeline in the future. The reason might be that to capture the coordinates more precisely (more decimal points) because when capturing tiny regions, this level precision matters. All in all 99.8089% of the regions have been captured. A couple notes (on some regions that were manually dropped): na_pop_regions_dropped_obj_ids (if no specific comments mentioned, means population is 0 and as a result pollution was 0): 25050 (pop avialable, but all pollution  columns are 0, weird), 35356 (population is 0, but all pollution columns are available, more weirder), 37791 (population is available, but all pollution data columns are missing), 42205 (zero population, but all pollution columns are available). Only kept rows where both population and atleast one pollution column is available.
@@ -555,19 +597,70 @@ missing_regions_capture %>%
 
 # Before the incorporation of missing and na pop regions we had 48059 unique object ids in gadm 2 (including 97 na pop regions). Now removing the 97 na pop regions and replaing them with 16 filled pop regions and 47 regions that were previously missing, brings the final count of object ids to 48025 (48059 - 97 + 16 + 47). All in all 99.61213% (48025/48212) of the regions have been captured, where 48212 are the total number of objectids in the latest colormap shapefile.
 
-na_pop_regions_processed_handpicked <- read_csv(str_c(na_pop_regions_folder_path, "na_pop_regions_processed_handpicked.csv"))
+# na_pop_regions_processed_handpicked <- read_csv(str_c(na_pop_regions_folder_path, "na_pop_regions_processed_handpicked.csv"))
+# 
+# missing_regions_processed_handpicked <- read_csv(str_c(missing_regions_folder_path, "missing_regions_processed_handpicked.csv"))
+# 
+# 
+# na_pop_regions_processed_handpicked_obj_ids <- na_pop_regions_processed_handpicked$objectid_gadm2
 
-missing_regions_processed_handpicked <- read_csv(str_c(missing_regions_folder_path, "missing_regions_processed_handpicked.csv"))
 
 
-na_pop_regions_processed_handpicked_obj_ids <- na_pop_regions_processed_handpicked$objectid_gadm2
+#> incorporate all missing and na pop regions here (even the ones that we expect to be missing, i.e. all 48212 regions)-------------
 
+# first capture all regions that we don't expect to be missing
 aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
-  filter(objectid_gadm2 %notin% na_pop_regions_processed_handpicked_obj_ids) %>%
-  bind_rows(na_pop_regions_processed_handpicked) %>%
-  bind_rows(missing_regions_processed_handpicked) %>%
-  filter(population != 0) %>%
+  filter(objectid_gadm2 %notin% na_pop_regions_processed_final$objectid_gadm2) %>%
+  bind_rows(na_pop_regions_processed_final) %>%
+  bind_rows(missing_regions_capture_final) %>%
   arrange(objectid_gadm2)
+
+# df of regions that we expect to be missing
+
+col_names_tmp <- str_c("pm", 1998:2022)
+
+ df_regions_exp_to_be_missing <- colormap %>% 
+  anti_join(tmp, by = c("objectid" = "objectid_gadm2")) %>%
+  st_drop_geometry() %>%
+    mutate(whostandard = 5, natstandard = NA) %>%
+  select(objectid, iso_alpha3, NAME_0, NAME_1, NAME_2, whostandard, natstandard) %>%
+  rename(objectid_gadm2 = objectid, country = NAME_0, 
+         name_1 = NAME_1, name_2 = NAME_2) 
+ 
+ df_regions_exp_to_be_missing[col_names_tmp] <- NA
+ 
+# bind rows with the master dataset 
+ 
+aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
+  bind_rows(df_regions_exp_to_be_missing) %>%
+  arrange(objectid_gadm2)
+
+
+#> removing waterbodies from the gadm2 dataset and post this gadm2 data will be finalized (do bear lake adjustment)-----------------------------------
+
+# read in waterbodies file (Bear Lake is not counted in this, because that's a county in Idaho, US)
+waterbodies_aqli <- read_csv(paste0(here(), "/", master_folder_data_path, "/", "data/input/others/waterbodies_aqli.csv")) 
+
+waterbodies_aqli <- waterbodies_aqli %>%
+  select(-type)
+
+
+# filter waterbodies in the aqli gadm2 collapse master dataset and then 2 extra rows after that don't get proper matched
+waterbodies_aqli_final <- aqli_gadm2_collapse_master %>% 
+  filter(country %in% waterbodies_aqli$gadm0 & name_1 %in% waterbodies_aqli$gadm1, name_2 %in% waterbodies_aqli$gadm2)
+
+# remove these rows
+two_extra_rows <- tmp %>% 
+  anti_join(waterbodies_aqli, by = c("country" = "gadm0", "name_1" = "gadm1", "name_2" = "gadm2"))
+
+# final waterbodies to be removed
+waterbodies_aqli_final <- waterbodies_aqli_final %>%
+  filter(objectid_gadm2 %notin% two_extra_rows$objectid_gadm2)
+
+# remove the waterbodies from the aqli gadm2 collapse master
+aqli_gadm2_collapse_master <-  aqli_gadm2_collapse_master %>%
+  filter(objectid_gadm2 %notin% waterbodies_aqli_final$objectid_gadm2)
+
 
 #-----------------------------------------------------------------
 
@@ -577,23 +670,22 @@ threshold_12 <- Sys.time()
 #> add in the updated national standards column (last updated: January 18, 2023 by Aarsh) and bring it in appropriate "join ready" format (to be joined with the combined pollution data before adding life years lost columns)
 
 # reading in the national standards file (to do: add in (if missing) the national standards of the missing and zero pop regions captured above.)
-national_standards_pm2.5 <- readr::read_csv(stringr::str_c(national_standards_pm2.5_jan_2023_location, national_standards_pm2.5_jan_2023_file_name, sep = ""))
+national_standards_pm2.5 <- readr::read_csv(stringr::str_c(national_standards_pm2.5_location, national_standards_pm2.5_sep_2023_file_name, sep = ""))
 
 # keeping and renaming relevant columns
 national_standards_pm2.5 <- national_standards_pm2.5 %>%
-  dplyr::select(country, natstandard_pm2.5_new_2023_report_micr_grm_cubic_meter_op1) %>%
-  dplyr::rename(natstandard_updated = natstandard_pm2.5_new_2023_report_micr_grm_cubic_meter_op1)
+  dplyr::select(country, nat_ann_avg_pm2.5_aqli) 
 
 # replacing the national standards column of the aqli_gadm_collapse_master file (output of the above for loop) with the updated national standards column
 aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
   dplyr::left_join(national_standards_pm2.5, by = "country") %>%
   dplyr::select(-c(natstandard)) %>%
-  dplyr::select(objectid_gadm2:whostandard, natstandard_updated, dplyr::everything()) %>%
-  dplyr::rename(natstandard = natstandard_updated)
+  dplyr::select(objectid_gadm2:whostandard, nat_ann_avg_pm2.5_aqli, dplyr::everything()) %>%
+  dplyr::rename(natstandard = nat_ann_avg_pm2.5_aqli)
 
 # replace natstandard == "No national standard", with natstandard == 0, and then changing its data type to "numeric"
 aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
-  dplyr::mutate(natstandard = ifelse(natstandard == "No national standard", 0, natstandard))
+  dplyr::mutate(natstandard = ifelse(natstandard == "No national standard", NA, natstandard))
 
 aqli_gadm2_collapse_master$natstandard <- as.numeric(aqli_gadm2_collapse_master$natstandard)
   
@@ -603,12 +695,19 @@ aqli_gadm2_collapse_master <- aqli_gadm2_collapse_master %>%
   dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
   dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
   dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
-  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(is.na(natstandard), NA, .x))) %>%
   dplyr::select(objectid_gadm2, iso_alpha3, country, name_1, name_2, population, whostandard, natstandard, everything()) %>%
     dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
   dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
-    dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
-  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard))
+    dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) 
+
+
+### Creating AQLI internal column name version of the CSVs=============================================
+# 
+# # create a version of old colnames gadm2 file that has waterbodies removed from it
+# aqli_gadm2_collapse_master_finalized_wat_adj_internal <- aqli_gadm2_collapse_master %>%
+#   anti_join(waterbodies_aqli, by = c("country" = "gadm0", "name_1" = "gadm1", "name_2" = "gadm2"))
+
 
 # benchmarking
 threshold_13 <- Sys.time() 
@@ -616,44 +715,48 @@ threshold_13 <- Sys.time()
 # write the above (non-geometry version) of gadm2 master file to the collapsed/gadm2 folder (this version incorporates the na pop and missing regions, but only partially incoroporate ViT column name changes request). Full changes version as requested by ViT will be written at the end of this chunk for all 3 levels (both geom and non-geom versions)
 
 aqli_gadm2_collapse_master %>%
-  readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_non_geom.csv"))
+  readr::write_csv(str_c(ssd_location_collapsed_gadm2_data_path, "[missingAndNAPopRegionsIncorpLLppAddedButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_non_geom.csv"))
+
+#============================shp file generattion area (not necessary to save these separately)=================================
 
 #> add in the geometry column by left joining the above with a color file and then write that to the collapsed/gadm2 folder
 
-# joining the gadm2 collapse master file with colormap (using objectid as the joining column), to get the geometry column
-aqli_gadm2_collapse_master_with_geom <- aqli_gadm2_collapse_master %>%
-  dplyr::left_join(colormap %>% rename(objectid_gadm2 = objectid), by = "objectid_gadm2") %>%
-  dplyr::rename(iso_alpha3 = iso_alpha3.x) %>%
-  dplyr::select(-c(iso_alpha3.y, NAME_0, NAME_1, NAME_2))
+# # joining the gadm2 collapse master file with colormap (using objectid as the joining column), to get the geometry column
+# aqli_gadm2_collapse_master_with_geom <- aqli_gadm2_collapse_master %>%
+#   dplyr::left_join(colormap %>% rename(objectid_gadm2 = objectid), by = "objectid_gadm2") %>%
+#   dplyr::rename(iso_alpha3 = iso_alpha3.x) %>%
+#   dplyr::select(-c(iso_alpha3.y, NAME_0, NAME_1, NAME_2))
 
-# creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm2 collapse master dataset, to avoid any confusions.
+# # creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm2 collapse master dataset, to avoid any confusions.
+# 
+# new_col_names_gadm2_collapse_master_geom_ver <- colnames(aqli_gadm2_collapse_master_with_geom) %>%
+#   dplyr::as_tibble() %>%
+#   dplyr::mutate(
+#          col_names_shortened = str_replace(value, "who", "w"), 
+#          col_names_shortened = str_replace(col_names_shortened, "nat", "n"), 
+#          col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
+#          col_names_shortened = str_replace(col_names_shortened, "_", ""), 
+#          col_names_shortened = str_replace(col_names_shortened, "objectidgadm2", "objidgadm2"), 
+#          col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
+#   dplyr::select(col_names_shortened) %>%
+#   unlist() %>%
+#   as.vector()
+# 
+# # assigning new colnames to the geom version of the gadm2 collapse master file
+# colnames(aqli_gadm2_collapse_master_with_geom) <- new_col_names_gadm2_collapse_master_geom_ver
+# 
+# # making sure to st_as_sf the geom version before exporting to shape file and then exporting the shape file
+# aqli_gadm2_collapse_master_with_geom <- aqli_gadm2_collapse_master_with_geom %>%
+#   sf::st_as_sf() 
+# 
+# # write the missing and NA pop region incorporated and ViT column names changes partially incorporated (which will be more than enough for geom version, as it is to be used internally). 
+# 
+# #This warning was issued while writing the shapefile, need to be resolved: In CPL_write_ogr(obj, dsn, layer, driver, as.character(dataset_options): GDAL Message 1: One or several characters couldn't be converted correctly from UTF-8 to ISO-8859-1.  This warning # will not be emitted anymore
+#   
+# aqli_gadm2_collapse_master_with_geom %>%
+#   sf::write_sf(str_c(ssd_location_collapsed_gadm2_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_geom.shp"))
 
-new_col_names_gadm2_collapse_master_geom_ver <- colnames(aqli_gadm2_collapse_master_with_geom) %>%
-  dplyr::as_tibble() %>%
-  dplyr::mutate(
-         col_names_shortened = str_replace(value, "who", "w"), 
-         col_names_shortened = str_replace(col_names_shortened, "nat", "n"), 
-         col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
-         col_names_shortened = str_replace(col_names_shortened, "_", ""), 
-         col_names_shortened = str_replace(col_names_shortened, "objectidgadm2", "objidgadm2"), 
-         col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
-  dplyr::select(col_names_shortened) %>%
-  unlist() %>%
-  as.vector()
-
-# assigning new colnames to the geom version of the gadm2 collapse master file
-colnames(aqli_gadm2_collapse_master_with_geom) <- new_col_names_gadm2_collapse_master_geom_ver
-
-# making sure to st_as_sf the geom version before exporting to shape file and then exporting the shape file
-aqli_gadm2_collapse_master_with_geom <- aqli_gadm2_collapse_master_with_geom %>%
-  sf::st_as_sf() 
-
-# write the missing and NA pop region incorporated and ViT column names changes partially incorporated (which will be more than enough for geom version, as it is to be used internally). 
-
-#This warning was issued while writing the shapefile, need to be resolved: In CPL_write_ogr(obj, dsn, layer, driver, as.character(dataset_options): GDAL Message 1: One or several characters couldn't be converted correctly from UTF-8 to ISO-8859-1.  This warning # will not be emitted anymore
-  
-aqli_gadm2_collapse_master_with_geom %>%
-  sf::write_sf(str_c(ssd_location_collapsed_gadm2_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm2_geom.shp"))
+#============================shp file generattion area (not necessary to save these separately)=================================
 
 # garbage collection
 gc()
@@ -679,63 +782,67 @@ aqli_gadm0_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
     dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
   dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
   dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
-  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(is.na(natstandard), NA, .x))) %>%
   dplyr::select(objectid_gadm0, iso_alpha3, country, population, whostandard, natstandard, dplyr::everything()) %>%
   dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
   dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
-   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
-  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard))
-  
+  dplyr::mutate(across(matches("pm|llpp"), ~ifelse(population == 0, NA, .x))) %>%
+  dplyr::mutate(population = ifelse(population == 0, NA, population)) %>%
+  dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) 
+
 
 # write the above (non-geometry version) of gadm0 master file to the collapsed/gadm0 folder (this version incorporates the na pop and missing regions, but only partially incoroporate ViT column name changes request). Full changes version as requested by ViT will be written at the end of this chunk for all 3 levels (both geom and non-geom versions)
 
 aqli_gadm0_collapse_from_gadm2 %>%
-  readr::write_csv(str_c(ssd_location_collapsed_gadm0_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_non_geom.csv"))
+  readr::write_csv(str_c(ssd_location_collapsed_gadm0_data_path, "[missingAndNAPopRegionsIncorpLLppAddedButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_non_geom.csv"))
 
+#============================shp file generattion area (not necessary to save these separately)=================================
 
-# read in the gadm0 shape file (which is collapsed from the colormap) and get it ready for joining with the above summary table
+# # read in the gadm0 shape file (which is collapsed from the colormap) and get it ready for joining with the above summary table
+# 
+# gadm0_shp_file <- sf::st_read(str_c(shp_files_location, gadm0_shp_file_location, sep = ""))
+# 
+# gadm0_shp_file_subset <- gadm0_shp_file %>%
+#   dplyr::select(-c(NAME_1, NAME_2, objectid, iso_alpha3))
+# 
+# # add in the geometry column by left joining the above with a country level shape file and then write that to the collapsed/gadm0 folder
+# 
+# # joining the gadm0 collapse master file with the country level shapefile (using "country/NAME_0" as the joining column), to get the geometry column
+# 
+# aqli_gadm0_collapse_from_gadm2_with_geom <- aqli_gadm0_collapse_from_gadm2 %>%
+#   dplyr::left_join(gadm0_shp_file_subset, by = c("country" = "NAME_0")) %>%
+#   sf::st_as_sf()
+# 
+# # (tbd): creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm0 collapse master dataset, to avoid any confusions.
+# 
+# new_col_names_gadm0_collapse_from_gadm2 <- colnames(aqli_gadm0_collapse_from_gadm2_with_geom) %>%
+#   dplyr::as_tibble() %>%
+#   dplyr::mutate( 
+#          col_names_shortened = str_replace(value, "who", "w"), 
+#          col_names_shortened = str_replace(col_names_shortened, "nat", "n"), 
+#          col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
+#          col_names_shortened = str_replace(col_names_shortened, "_", ""), 
+#          col_names_shortened = str_replace(col_names_shortened, "objectidgadm0", "objidgadm0"), 
+#          col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
+#   dplyr::select(col_names_shortened) %>%
+#   unlist() %>%
+#   as.vector()
+# 
+# 
+# # (tbd): assigning new colnames to the geom version of the gadm0 collapse master file
+# colnames(aqli_gadm0_collapse_from_gadm2_with_geom) <- new_col_names_gadm0_collapse_from_gadm2
+# 
+# # (tbd): making sure to st_as_sf the geom version before exporting to shape file and then exporting the shape file
+# 
+# aqli_gadm0_collapse_from_gadm2_with_geom <- aqli_gadm0_collapse_from_gadm2_with_geom %>%
+#   sf::st_as_sf()
+# 
+# 
+# # write the missing and NA pop region incorporated and ViT column names changes partially incorporated (which will be more than enough for geom version, as it is to be used internally). There were warning related to couple fields whose population values were not successfully written because it was too large a number with respect to the field: "width warning" (GDAL Message 1). Resolve this warning, a screenshot of it is stored in the gadm0 folder under collapsed folder in the ssd.
+# aqli_gadm0_collapse_from_gadm2_with_geom %>%
+#   sf::write_sf(str_c(ssd_location_collapsed_gadm0_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_geom.shp"))
 
-gadm0_shp_file <- sf::st_read(str_c(shp_files_location, gadm0_shp_file_location, sep = ""))
-
-gadm0_shp_file_subset <- gadm0_shp_file %>%
-  dplyr::select(-c(NAME_1, NAME_2, objectid, iso_alpha3))
-
-# add in the geometry column by left joining the above with a country level shape file and then write that to the collapsed/gadm0 folder
-
-# joining the gadm0 collapse master file with the country level shapefile (using "country/NAME_0" as the joining column), to get the geometry column
-
-aqli_gadm0_collapse_from_gadm2_with_geom <- aqli_gadm0_collapse_from_gadm2 %>%
-  dplyr::left_join(gadm0_shp_file_subset, by = c("country" = "NAME_0")) %>%
-  sf::st_as_sf()
-
-# (tbd): creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm0 collapse master dataset, to avoid any confusions.
-
-new_col_names_gadm0_collapse_from_gadm2 <- colnames(aqli_gadm0_collapse_from_gadm2_with_geom) %>%
-  dplyr::as_tibble() %>%
-  dplyr::mutate( 
-         col_names_shortened = str_replace(value, "who", "w"), 
-         col_names_shortened = str_replace(col_names_shortened, "nat", "n"), 
-         col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
-         col_names_shortened = str_replace(col_names_shortened, "_", ""), 
-         col_names_shortened = str_replace(col_names_shortened, "objectidgadm0", "objidgadm0"), 
-         col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
-  dplyr::select(col_names_shortened) %>%
-  unlist() %>%
-  as.vector()
-
-
-# (tbd): assigning new colnames to the geom version of the gadm0 collapse master file
-colnames(aqli_gadm0_collapse_from_gadm2_with_geom) <- new_col_names_gadm0_collapse_from_gadm2
-
-# (tbd): making sure to st_as_sf the geom version before exporting to shape file and then exporting the shape file
-
-aqli_gadm0_collapse_from_gadm2_with_geom <- aqli_gadm0_collapse_from_gadm2_with_geom %>%
-  sf::st_as_sf()
-
-
-# write the missing and NA pop region incorporated and ViT column names changes partially incorporated (which will be more than enough for geom version, as it is to be used internally). There were warning related to couple fields whose population values were not successfully written because it was too large a number with respect to the field: "width warning" (GDAL Message 1). Resolve this warning, a screenshot of it is stored in the gadm0 folder under collapsed folder in the ssd.
-aqli_gadm0_collapse_from_gadm2_with_geom %>%
-  sf::write_sf(str_c(ssd_location_collapsed_gadm0_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm0_geom.shp"))
+#============================shp file generattion area (not necessary to save these separately)=================================
 
 # garbage collection
 gc()
@@ -760,64 +867,89 @@ aqli_gadm1_collapse_from_gadm2 <- aqli_gadm2_collapse_master %>%
     dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
   dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
   dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
-  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(is.na(natstandard), NA, .x))) %>%
   dplyr::select(objectid_gadm1, iso_alpha3, country, name_1, population, whostandard, natstandard, dplyr::everything()) %>%
   dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
   dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
-   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
-  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard))
+  dplyr::mutate(across(matches("pm|llpp"), ~ifelse(population == 0, NA, .x))) %>%
+  dplyr::mutate(population = ifelse(population == 0, NA, population)) %>%
+   dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) 
   
   
 
 # write the above (non-geometry version) of gadm1 master file to the collapsed/gadm1 folder (this version incorporates the na pop and missing regions, but only partially incoroporate ViT column name changes request). Full changes version as requested by ViT will be written at the end of this chunk for all 3 levels (both geom and non-geom versions)
 
 aqli_gadm1_collapse_from_gadm2 %>%
-  readr::write_csv(str_c(ssd_location_collapsed_gadm1_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_non_geom.csv"))
+  readr::write_csv(str_c(ssd_location_collapsed_gadm1_data_path, "[missingAndNAPopRegionsIncorpLLppAddedButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_non_geom.csv"))
 
-# read in the gadm1 shape file (which is collapsed from the colormap) and get it ready for joining with the above summary table
+#============================shp file generattion area (not necessary to save these separately)=================================
 
-gadm1_shp_file <- sf::st_read(str_c(shp_files_location, gadm1_shp_file_location, sep = ""))
+# # read in the gadm1 shape file (which is collapsed from the colormap) and get it ready for joining with the above summary table
+# 
+# gadm1_shp_file <- sf::st_read(str_c(shp_files_location, gadm1_shp_file_location, sep = ""))
+# 
+# 
+# gadm1_shp_file_subset <- gadm1_shp_file %>%
+#   dplyr::select(-c(NAME_2, objectid, iso_alpha3))
+# 
+# # (tbd) add in the geometry column by left joining the above with a state level shape file and then write that to the collapsed/gadm1 folder
+# 
+# # joining the gadm1 collapse master file with the state level shapefile (using " " as the joining column), to get the geometry column
+# 
+# aqli_gadm1_collapse_from_gadm2_with_geom <- aqli_gadm1_collapse_from_gadm2 %>%
+#   dplyr::left_join(gadm1_shp_file_subset, by = c("country" = "NAME_0", "name_1" = "NAME_1")) %>%
+#   sf::st_as_sf()
+# 
+# 
+# # (tbd): creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm1 collapse master dataset, to avoid any confusions.
+# 
+# new_col_names_gadm1_collapse_from_gadm2 <- colnames(aqli_gadm1_collapse_from_gadm2_with_geom) %>%
+#   dplyr::as_tibble() %>%
+#   dplyr::mutate( 
+#          col_names_shortened = str_replace(value, "who", "w"), 
+#          col_names_shortened = str_replace(col_names_shortened, "nat", "n"), 
+#          col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
+#          col_names_shortened = str_replace(col_names_shortened, "_", ""), 
+#          col_names_shortened = str_replace(col_names_shortened, "objectidgadm1", "objidgadm1"), 
+#          col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
+#   dplyr::select(col_names_shortened) %>%
+#   unlist() %>%
+#   as.vector()
+# 
+# # (tbd): assigning new colnames to the geom version of the gadm1 collapse master file
+# colnames(aqli_gadm1_collapse_from_gadm2_with_geom) <- new_col_names_gadm1_collapse_from_gadm2
+# 
+# # (tbd): making sure to st_as_sf the geom version before exporting to shape file and then exporting the shape file
+# 
+# aqli_gadm1_collapse_from_gadm2_with_geom <- aqli_gadm1_collapse_from_gadm2_with_geom %>%
+#   sf::st_as_sf()
+# 
+# # write the missing and NA pop region incorporated and ViT column names changes partially incorporated (which will be more than enough for geom version, as it is to be used internally). There were warning related to couple fields whose population values were not successfully written because it was too large a number with respect to the field: "width warning" (GDAL Message 1). Resolve this warning, a screenshot of it is stored in the gadm1 folder under collapsed folder in the ssd.
+# 
+# aqli_gadm1_collapse_from_gadm2_with_geom %>%
+#   sf::write_sf(str_c(ssd_location_collapsed_gadm1_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_geom.shp"))
+
+#============================shp file generattion area (not necessary to save these separately)=================================
 
 
-gadm1_shp_file_subset <- gadm1_shp_file %>%
-  dplyr::select(-c(NAME_2, objectid, iso_alpha3))
-
-# (tbd) add in the geometry column by left joining the above with a state level shape file and then write that to the collapsed/gadm1 folder
-
-# joining the gadm1 collapse master file with the state level shapefile (using " " as the joining column), to get the geometry column
-
-aqli_gadm1_collapse_from_gadm2_with_geom <- aqli_gadm1_collapse_from_gadm2 %>%
-  dplyr::left_join(gadm1_shp_file_subset, by = c("country" = "NAME_0", "name_1" = "NAME_1")) %>%
-  sf::st_as_sf()
+# end of main pipeline
 
 
-# (tbd): creating new shortened colnames, before exporting as a shape file, to be compliant with ESRI shapefile column name restrictions. Note that, when reading the shapefile later on, remember to convert the colnames back to how it appears in the "non-geom" version of the gadm1 collapse master dataset, to avoid any confusions.
 
-new_col_names_gadm1_collapse_from_gadm2 <- colnames(aqli_gadm1_collapse_from_gadm2_with_geom) %>%
-  dplyr::as_tibble() %>%
-  dplyr::mutate( 
-         col_names_shortened = str_replace(value, "who", "w"), 
-         col_names_shortened = str_replace(col_names_shortened, "nat", "n"), 
-         col_names_shortened = str_replace(col_names_shortened, "standard", "stan"), 
-         col_names_shortened = str_replace(col_names_shortened, "_", ""), 
-         col_names_shortened = str_replace(col_names_shortened, "objectidgadm1", "objidgadm1"), 
-         col_names_shortened = str_replace(col_names_shortened, "isoalpha3", "isoal3")) %>%
-  dplyr::select(col_names_shortened) %>%
-  unlist() %>%
-  as.vector()
 
-# (tbd): assigning new colnames to the geom version of the gadm1 collapse master file
-colnames(aqli_gadm1_collapse_from_gadm2_with_geom) <- new_col_names_gadm1_collapse_from_gadm2
 
-# (tbd): making sure to st_as_sf the geom version before exporting to shape file and then exporting the shape file
 
-aqli_gadm1_collapse_from_gadm2_with_geom <- aqli_gadm1_collapse_from_gadm2_with_geom %>%
-  sf::st_as_sf()
 
-# write the missing and NA pop region incorporated and ViT column names changes partially incorporated (which will be more than enough for geom version, as it is to be used internally). There were warning related to couple fields whose population values were not successfully written because it was too large a number with respect to the field: "width warning" (GDAL Message 1). Resolve this warning, a screenshot of it is stored in the gadm1 folder under collapsed folder in the ssd.
 
-aqli_gadm1_collapse_from_gadm2_with_geom %>%
-  sf::write_sf(str_c(ssd_location_collapsed_gadm1_data_path, "[missingAndNAPopRegionsIncorpButViTcolNameChangesPartiallyIncorp]master_global_allyears_gadm1_geom.shp"))
+
+
+
+
+
+
+
+
+
 
 #> For gadm 0, 1 and 2 write the final versions (non-geom version) of files, incorporating all remaining ViT column name changes/drop requests, add notes from the sticky notes (and then remove the sticky notes comment). Geom versions will work without ViT name restrictions as it is to be used internally, and wrap this up!!!.
 
@@ -873,7 +1005,14 @@ print(str_c("Total time taken: ", end_time_vit_data_pipeline - start_time,  " mi
 
 
 
+# Below are extra chunks that are now incorporated in the above pipeline+++++++++++++++++++++++++++++=============================
 
+
+
+
+
+
+#-----------------------------------------------------------------------------------------------------------------------------------
 
 # Remove waterbodies from AQLI datasets (both old colnames version and ViT colnames version)-------------------
 
@@ -925,12 +1064,11 @@ aqli_gadm1_collapse_master_finalized_wat_adj_internal <- aqli_gadm2_collapse_mas
     dplyr::mutate(across(starts_with("pm"), (~(.x - whostandard)*aqli_lyl_constant), .names = "llpp_who{col}")) %>%
   dplyr::mutate(across(starts_with("pm"), (~(.x - natstandard)*aqli_lyl_constant), .names = "llpp_nat{col}")) %>%
   dplyr::mutate(across(starts_with("llpp"), ~ifelse(.x < 0, 0, .x))) %>%
-  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(natstandard == 0, NA, .x))) %>%
+  dplyr::mutate(across(starts_with("llpp_nat"), ~ifelse(is.na(natstandard), NA, .x))) %>%
   dplyr::select(objectid_gadm1, iso_alpha3, country, name_1, population, whostandard, natstandard, dplyr::everything()) %>%
   dplyr::rename_with(~str_replace(.x, "pm", ""), dplyr::contains("llpp")) %>%
   dplyr::mutate(across(dplyr::matches("pm|llpp"), ~(round(.x, 2)), .names = "{col}")) %>%
    dplyr::rename_with(~str_replace(.x, "llpp_", ""), dplyr::contains("llpp")) %>%
-  dplyr::mutate(natstandard = ifelse(natstandard == 0, NA, natstandard)) %>%
   dplyr::rename_with(~str_replace(.x, "who", "llpp_who_"), dplyr::contains("who")) %>%
   dplyr::rename_with(~str_replace(.x, "nat", "llpp_nat_"), dplyr::contains("nat")) %>%
   rename(whostandard = llpp_who_standard,
