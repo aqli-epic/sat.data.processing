@@ -1,0 +1,251 @@
+####################################################
+
+# 3_join_pop_to_shp.R
+
+#
+
+# Input: TIF tiles of population raster
+
+#
+
+# Description: Converts each raster tile into
+
+# 	points, attempts to join to colormap shapefile
+
+#
+
+# Output: Shapefiles of population points, separated
+
+#	by successfully joined to colormap shp or not.
+
+#
+
+# Runtime: 1-2 hours
+
+####################################################
+
+code_run_start_time <- Sys.time()
+
+
+library(raster)
+
+library(sf)
+
+library(dplyr)
+
+library(purrr)
+
+library(nngeo)
+
+
+
+pop_year <- 2019
+
+
+
+pop_dir <- "C:/Arc/Preserve/data/population"
+
+shp_dir <- "C:/Arc/Preserve/data/shapefiles"
+
+
+
+start_i <- 1
+
+end_i <- 25
+
+
+
+colormap <- st_read(file.path(shp_dir, "color/colormap.shp"), stringsAsFactors = FALSE) %>%
+
+			dplyr::select(objectid, geometry)
+
+colormap <- colormap[with(colormap, order(objectid)),]
+
+
+
+for(i in start_i:end_i){
+
+  # Read in raster tile
+
+  raster_i <- raster(file.path(pop_dir, "/intermediate/split_raster/", pop_year, "/lspop", pop_year, "_tile", i, ".grd", fsep = ""))
+
+  print(i)
+
+  # Convert raster tile to SF object with pop as a field and coords as geometry. Only use cells with pop>0, to save space.
+
+  start_time <- Sys.time()
+
+  print(i)
+
+  points_i <- raster::rasterToPoints(raster_i, fun=function(x){x>0}) %>%
+
+    data.frame() %>%
+
+    sf::st_as_sf(coords = c("x", "y"))
+
+  end_time <- Sys.time()
+
+  names(points_i)[1] <- "pop"
+
+  print("Raster to point:")
+
+  print(end_time - start_time)
+
+  # Stop and move to next tile if no points with pop>0 in this tile
+
+  if (nrow(points_i)==0) {
+
+    next
+
+  }
+
+
+
+  # Set Coordinate Reference System of pop points to be same as colormap
+
+
+  print(i)
+
+  points_i <- sf::st_set_crs(points_i, st_crs(colormap))
+
+  # Join points to colormap shapefile
+
+  print(i)
+
+  start_time <- Sys.time()
+
+  joined <- st_join(points_i, colormap, join = st_intersects, left = TRUE)
+
+  end_time <- Sys.time()
+
+  print("Join to colormap:")
+
+  print(i)
+
+  print(end_time - start_time)
+
+  # Some coastal points contain valuable population info but do not lie directly above a shapefile polygon.
+
+  # Separate into successfully joined and not joined points. Not joined will be put together in one shp
+
+  # and then joined in QGIS, using the "approximate geometries by centroid" option, which is fast.
+
+  not_joined <- joined[is.na(joined$objectid),]
+
+  joined <- joined[!is.na(joined$objectid),]
+
+
+
+  # Export as shapefiles
+
+  print(i)
+
+  st_write(joined, file.path(pop_dir, "/intermediate/pop_points_joined_notjoined/joined/", pop_year, "/pop_joined_", i, ".shp", fsep = ""), delete_layer = TRUE)
+
+  st_write(not_joined, file.path(pop_dir, "/intermediate/pop_points_joined_notjoined/notjoined/", pop_year, "/pop_notjoined_", i, ".shp", fsep = ""), delete_layer = TRUE)
+
+
+}
+
+
+
+# Using the "map" function------------------------------------------------------------------------------------
+
+# r2p_join <- function(i){
+#
+# 	# Read in raster tile
+#
+# 	raster_i <- raster(file.path(pop_dir, "/intermediate/split_raster/", pop_year, "/lspop", pop_year, "_tile", i, ".grd", fsep = ""))
+#
+# 	print(i)
+#
+# 	# Convert raster tile to SF object with pop as a field and coords as geometry. Only use cells with pop>0, to save space.
+#
+# 	start_time <- Sys.time()
+#
+# 	print(i)
+#
+# 	points_i <- raster::rasterToPoints(raster_i, fun=function(x){x>0}) %>%
+#
+# 				data.frame() %>%
+#
+# 				sf::st_as_sf(coords = c("x", "y"))
+#
+# 	end_time <- Sys.time()
+#
+# 	names(points_i)[1] <- "pop"
+#
+# 	print("Raster to point:")
+#
+# 	print(end_time - start_time)
+#
+# 	# Stop and move to next tile if no points with pop>0 in this tile
+#
+# 	if (nrow(points_i)==0) {
+#
+# 		return(NULL)
+#
+# 	}
+#
+#
+#
+# 	# Set Coordinate Reference System of pop points to be same as colormap
+#
+#
+# 	print(i)
+#
+# 	points_i <- sf::st_set_crs(points_i, st_crs(colormap))
+#
+# 	# Join points to colormap shapefile
+#
+# 	print(i)
+#
+# 	start_time <- Sys.time()
+#
+# 	joined <- st_join(points_i, colormap, join = st_intersects, left = TRUE)
+#
+# 	end_time <- Sys.time()
+#
+# 	print("Join to colormap:")
+#
+# 	print(i)
+#
+# 	print(end_time - start_time)
+#
+# 	# Some coastal points contain valuable population info but do not lie directly above a shapefile polygon.
+#
+# 	# Separate into successfully joined and not joined points. Not joined will be put together in one shp
+#
+# 	# and then joined in QGIS, using the "approximate geometries by centroid" option, which is fast.
+#
+# 	not_joined <- joined[is.na(joined$objectid),]
+#
+# 	joined <- joined[!is.na(joined$objectid),]
+#
+#
+#
+# 	# Export as shapefiles
+#
+# 	print(i)
+#
+# 	st_write(joined, file.path(pop_dir, "/intermediate/pop_points_joined_notjoined/joined/", pop_year, "/pop_joined_", i, ".shp", fsep = ""), delete_layer = TRUE)
+#
+# 	st_write(not_joined, file.path(pop_dir, "/intermediate/pop_points_joined_notjoined/notjoined/", pop_year, "/pop_notjoined_", i, ".shp", fsep = ""), delete_layer = TRUE)
+#
+# }
+
+
+
+# map(c(start_i:end_i), r2p_join)
+
+# Using the "map" function-----------------------------------------------------------------------------------
+
+
+
+print("3_raster_to_points.R COMPLETED")
+
+code_run_end_time <- Sys.time()
+
+elapsed_time <- code_run_end_time - code_run_start_time # 1hr 56 minutes
+
+print(str_c("Elapsed Time: ", elapsed_time, sep =" "))
